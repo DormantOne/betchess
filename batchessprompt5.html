@@ -110,7 +110,7 @@ body::before {
   padding: 14px;
   display: flex; flex-direction: column; gap: 10px;
   border-right: 1px solid var(--border);
-  height: calc(100vh - 60px); /* Fill vertical space */
+  height: calc(100vh - 60px);
 }
 @media (max-width: 920px) { .board-col { border-right: none; border-bottom: 1px solid var(--border); height: auto; } }
 
@@ -119,6 +119,7 @@ body::before {
   width: 100%; max-width: 480px;
   margin: 0 auto;
   position: relative; /* anchor for SVG overlay */
+  flex-shrink: 0;
 }
 #board { width: 100%; }
 
@@ -144,6 +145,7 @@ body::before {
 .board-info {
   display: flex; justify-content: space-between; align-items: center;
   font-family: 'IBM Plex Mono', monospace; font-size: 0.76rem; color: var(--text-dim);
+  flex-shrink: 0;
 }
 .free-tag {
   display: inline-flex; align-items: center; gap: 4px;
@@ -160,7 +162,7 @@ body::before {
 }
 
 /* Dual bankroll bars */
-.bank-bars { display: flex; gap: 6px; align-items: center; }
+.bank-bars { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .bank-bar-wrap { flex: 1; }
 .bank-bar-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--text-dim); margin-bottom: 2px; }
 .bank-bar { height: 5px; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
@@ -176,7 +178,7 @@ body::before {
   padding: 14px;
   display: flex; flex-direction: column; gap: 12px;
   height: calc(100vh - 60px);
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 /* ── Buttons ── */
@@ -199,10 +201,10 @@ button.success:hover { background: var(--green-dim); }
 button.purple { border-color: rgba(167,139,250,0.3); color: var(--purple); background: var(--purple-dim); }
 button.purple:hover { background: rgba(167,139,250,0.18); }
 button.sm { padding: 5px 10px; font-size: 0.73rem; }
-.btn-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.btn-row { display: flex; gap: 7px; flex-wrap: wrap; flex-shrink: 0; }
 
 /* ── Offer cards (sidebar) ── */
-.offers { display: grid; gap: 7px; }
+.offers { display: grid; gap: 7px; flex-shrink: 0; }
 .offer {
   display: grid; grid-template-columns: 30px 1fr auto;
   align-items: center; gap: 10px; padding: 10px 12px;
@@ -236,7 +238,7 @@ button.sm { padding: 5px 10px; font-size: 0.73rem; }
   display: flex; flex-direction: column;
   transition: flex 0.3s ease;
 }
-.llm-zone.active { flex: 1; min-height: 0; }
+.llm-zone.active { flex: 1; min-height: 0; margin-bottom: 5px; }
 .llm-zone-header {
   padding: 9px 14px;
   background: rgba(167,139,250,0.08);
@@ -339,7 +341,8 @@ button.sm { padding: 5px 10px; font-size: 0.73rem; }
 .log-box::-webkit-scrollbar { width: 4px; }
 .log-box::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 99px; }
 
-#log { flex: 1; min-height: 120px; }
+#log { flex: 1; min-height: 80px; margin-bottom: 5px; }
+#verboseLog { flex: 1; min-height: 80px; }
 
 /* ── Settings Drawer ── */
 .settings-overlay {
@@ -555,6 +558,12 @@ RULES:
     </div>
 
     <div class="log-box" id="log"></div>
+
+    <div class="section-head" style="margin-top:6px; flex-shrink:0;">Opponent</div>
+    <div class="pill" id="ui_opponent" style="width:fit-content; flex-shrink:0;">♟ Stockfish depth 12</div>
+
+    <div class="section-head" style="margin-top:6px; flex-shrink:0;">Engine Log</div>
+    <div class="log-box" id="verboseLog"></div>
   </div>
 
   <!-- Control Column -->
@@ -614,12 +623,6 @@ RULES:
         </div>
       </div>
     </div>
-
-    <div class="section-head" style="margin-top:6px">Opponent</div>
-    <div class="pill" id="ui_opponent" style="width:fit-content">♟ Stockfish depth 12</div>
-
-    <div class="section-head" style="margin-top:6px">Engine Log</div>
-    <div class="log-box" id="verboseLog"></div>
   </div>
 
 </div>
