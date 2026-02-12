@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BetChess — Strategic Resource Chess v4</title>
+
+<link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800;900&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════
+   Industrial chess terminal — warm amber on charcoal.
+   Symmetric budget: both sides see bankrolls + offers.
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #111210;
+  --bg-raised: #191b18;
+  --bg-sunken: #0c0d0b;
+  --amber: #e0a44c;
+  --amber-dim: rgba(224,164,76,0.10);
+  --amber-mid: rgba(224,164,76,0.25);
+  --green: #5ccc6f;
+  --green-dim: rgba(92,204,111,0.12);
+  --red: #e05252;
+  --red-dim: rgba(224,82,82,0.12);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --teal: #4ecdc4;
+  --slate: #8090a8;
+  --text: #ddd9d0;
+  --text-dim: #7a7668;
+  --border: #2c2e28;
+  --border-hi: #3e4138;
+  /* Arrow palette: 3 highly-distinct colors */
+  --arr1: #e8b04a; /* gold — best */
+  --arr2: #4ecdc4; /* teal — good */
+  --arr3: #a78bfa; /* lavender — budget */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Bitter', Georgia, serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 30%, rgba(224,164,76,0.03) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 70%, rgba(78,205,196,0.02) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ── Layout ── */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(340px, 480px) 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  max-width: 1220px;
+  margin: 0 auto;
+}
+@media (max-width: 920px) { .shell { grid-template-columns: 1fr; } }
+
+/* ── Top Bar ── */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  gap: 10px; flex-wrap: wrap;
+}
+.logo { font-weight: 900; font-size: 1.25rem; letter-spacing: -0.5px; color: var(--amber); }
+.logo .sub { font-weight: 400; font-size: 0.75rem; color: var(--text-dim); margin-left: 8px; }
+.topbar-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* ── Pills ── */
+.pills { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  font-family: 'IBM Plex Mono', monospace;
+  white-space: nowrap;
+}
+.pill b { color: var(--text); font-weight: 700; }
+.pill.good { border-color: rgba(92,204,111,0.25); }
+.pill.good b { color: var(--green); }
+.pill.warn { border-color: rgba(224,164,76,0.25); }
+.pill.warn b { color: var(--amber); }
+.pill.bad { border-color: rgba(224,82,82,0.25); }
+.pill.bad b { color: var(--red); }
+.pill.black-bank { border-color: rgba(167,139,250,0.25); }
+.pill.black-bank b { color: var(--purple); }
+
+/* ── Board Column ── */
+.board-col {
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  border-right: 1px solid var(--border);
+}
+@media (max-width: 920px) { .board-col { border-right: none; border-bottom: 1px solid var(--border); } }
+
+/* Board wrapper: holds the chessboard + SVG arrow overlay */
+#board-wrap {
+  width: 100%; max-width: 480px;
+  margin: 0 auto;
+  position: relative; /* anchor for SVG overlay */
+}
+#board { width: 100%; }
+
+/* SVG arrow overlay — sits on top of the board */
+#arrowSvg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; /* pass-through except for interactive elements */
+  z-index: 20;
+}
+/* Interactive SVG elements get pointer events */
+#arrowSvg .arrow-hit { pointer-events: all; cursor: pointer; }
+
+/* Arrow group styling */
+#arrowSvg .arrow-group { transition: opacity 0.15s; }
+#arrowSvg .arrow-group.dim { opacity: 0.3; }
+#arrowSvg .arrow-line { transition: stroke-width 0.15s, opacity 0.15s; }
+#arrowSvg .dest-circle { transition: opacity 0.15s; }
+#arrowSvg .arrow-group:hover .arrow-line { stroke-width: 4.5; }
+#arrowSvg .arrow-group:hover .dest-circle { opacity: 1 !important; }
+
+.board-info {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.76rem; color: var(--text-dim);
+}
+.free-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--green-dim);
+  border: 1px solid rgba(92,204,111,0.3);
+  color: var(--green); font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+}
+.free-tag:hover { background: rgba(92,204,111,0.2); }
+.free-tag.disabled {
+  opacity: 0.35; cursor: not-allowed;
+  background: var(--bg-sunken); color: var(--text-dim); border-color: var(--border);
+}
+
+/* Dual bankroll bars */
+.bank-bars { display: flex; gap: 6px; align-items: center; }
+.bank-bar-wrap { flex: 1; }
+.bank-bar-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--text-dim); margin-bottom: 2px; }
+.bank-bar { height: 5px; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+.bank-fill { height: 100%; border-radius: 99px; transition: width 0.5s cubic-bezier(0.22,1,0.36,1); }
+.bank-fill.w-fill { background: linear-gradient(90deg, var(--green), var(--amber)); }
+.bank-fill.w-fill.low { background: linear-gradient(90deg, var(--red), var(--amber)); }
+.bank-fill.b-fill { background: linear-gradient(90deg, var(--purple), var(--teal)); }
+.bank-fill.b-fill.low { background: linear-gradient(90deg, var(--red), var(--purple)); }
+.vs-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: var(--text-dim); padding: 0 2px; }
+
+/* ── Control Column ── */
+.ctrl-col {
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto; max-height: calc(100vh - 55px);
+}
+
+/* ── Buttons ── */
+button {
+  font-family: 'Bitter', Georgia, serif;
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 13px; font-size: 0.8rem; font-weight: 700;
+  cursor: pointer; background: var(--bg-raised); color: var(--text);
+  transition: all 0.12s; display: inline-flex; align-items: center; gap: 5px;
+}
+button:hover { background: var(--bg-sunken); border-color: var(--border-hi); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+button.primary { border-color: rgba(224,164,76,0.4); color: var(--amber); background: var(--amber-dim); }
+button.primary:hover { background: var(--amber-mid); }
+button.danger { border-color: rgba(224,82,82,0.3); color: var(--red); }
+button.danger:hover { background: var(--red-dim); }
+button.success { border-color: rgba(92,204,111,0.3); color: var(--green); }
+button.success:hover { background: var(--green-dim); }
+button.purple { border-color: rgba(167,139,250,0.3); color: var(--purple); background: var(--purple-dim); }
+button.purple:hover { background: rgba(167,139,250,0.18); }
+button.sm { padding: 5px 10px; font-size: 0.73rem; }
+.btn-row { display: flex; gap: 7px; flex-wrap: wrap; }
+
+/* ── Offer cards (sidebar) ── */
+.offers { display: grid; gap: 7px; }
+.offer {
+  display: grid; grid-template-columns: 30px 1fr auto;
+  align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-sunken);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.offer:hover { border-color: var(--border-hi); }
+.offer.hl { box-shadow: inset 0 0 0 1.5px rgba(224,164,76,0.3); background: rgba(224,164,76,0.04); }
+.offer .rank {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; font-weight: 900; font-size: 0.78rem;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.offer .rank.r1 { background: rgba(232,176,74,0.15); color: var(--arr1); border: 1px solid rgba(232,176,74,0.3); }
+.offer .rank.r2 { background: rgba(78,205,196,0.1); color: var(--arr2); border: 1px solid rgba(78,205,196,0.2); }
+.offer .rank.r3 { background: rgba(167,139,250,0.08); color: var(--arr3); border: 1px solid rgba(167,139,250,0.15); }
+.offer .move-info { display: flex; flex-direction: column; gap: 1px; }
+.offer .san { font-weight: 900; font-size: 1rem; letter-spacing: -0.3px; }
+.offer .eval { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--text-dim); }
+.offer .right { display: flex; align-items: center; gap: 8px; }
+.offer .cost { font-family: 'IBM Plex Mono', monospace; font-weight: 700; color: var(--amber); font-size: 0.88rem; }
+
+/* ── LLM Zone ── */
+.llm-zone {
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: 10px;
+  background: rgba(167,139,250,0.04);
+  overflow: hidden;
+}
+.llm-zone-header {
+  padding: 9px 14px;
+  background: rgba(167,139,250,0.08);
+  border-bottom: 1px solid rgba(167,139,250,0.15);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.llm-zone-header .title { font-weight: 800; font-size: 0.85rem; color: var(--purple); }
+.llm-zone-header .step-badge {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem;
+  padding: 2px 8px; border-radius: 4px;
+  background: rgba(167,139,250,0.15); color: var(--purple);
+}
+.llm-zone-body { padding: 12px 14px; }
+.llm-zone-body .instructions { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 8px; line-height: 1.5; }
+.llm-zone-body .instructions b { color: var(--text); }
+
+.llm-prompt-preview {
+  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; line-height: 1.5;
+  color: #8a9080; white-space: pre-wrap;
+  max-height: 120px; overflow-y: auto; margin-bottom: 8px;
+}
+.llm-prompt-preview::-webkit-scrollbar { width: 4px; }
+.llm-prompt-preview::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 99px; }
+
+.llm-paste-area {
+  width: 100%; background: var(--bg-sunken);
+  border: 2px solid rgba(167,139,250,0.4); border-radius: 8px;
+  color: var(--text); padding: 12px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem;
+  min-height: 130px; resize: vertical;
+}
+.llm-paste-area:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 12px rgba(167,139,250,0.3); }
+.llm-paste-area::placeholder { color: var(--text-dim); }
+.llm-paste-label {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;
+  color: var(--purple); font-weight: 700; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.llm-paste-label .arrow { animation: bounce-down 1s ease infinite; }
+@keyframes bounce-down { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
+
+/* Pulsing glow on the LLM zone when active */
+.llm-zone.active { animation: llm-pulse 2s ease-in-out infinite; }
+@keyframes llm-pulse {
+  0%,100% { border-color: rgba(167,139,250,0.3); box-shadow: 0 0 0 rgba(167,139,250,0); }
+  50% { border-color: rgba(167,139,250,0.6); box-shadow: 0 0 20px rgba(167,139,250,0.1); }
+}
+
+/* Parse & Play button — bigger and louder */
+.llm-parse-btn {
+  width: 100%; padding: 12px 16px !important; font-size: 0.95rem !important;
+  border-color: rgba(92,204,111,0.5) !important; background: rgba(92,204,111,0.12) !important;
+  color: var(--green) !important; justify-content: center;
+}
+
+.launch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 5px; margin-top: 6px; }
+
+.llm-reasoning {
+  margin-top: 8px; padding: 8px 10px;
+  background: rgba(167,139,250,0.06);
+  border: 1px solid rgba(167,139,250,0.15);
+  border-radius: 8px; font-size: 0.78rem;
+  color: var(--text-dim); line-height: 1.5;
+  max-height: 100px; overflow-y: auto; display: none;
+}
+.llm-reasoning.show { display: block; }
+.llm-reasoning .label { color: var(--purple); font-weight: 700; font-size: 0.72rem; margin-bottom: 3px; }
+
+/* ── Log ── */
+.log-box {
+  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; line-height: 1.55;
+  color: #8a9080; white-space: pre-wrap; max-height: 180px; overflow-y: auto;
+}
+.log-box::-webkit-scrollbar { width: 4px; }
+.log-box::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 99px; }
+
+/* ── Settings Drawer ── */
+.settings-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  z-index: 500; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.settings-overlay.open { opacity: 1; pointer-events: all; }
+.settings-drawer {
+  position: fixed; top: 0; right: 0;
+  width: min(420px, 90vw); height: 100vh;
+  background: var(--bg-raised); border-left: 1px solid var(--border);
+  z-index: 501; transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.settings-drawer.open { transform: translateX(0); }
+.settings-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.settings-header h2 { font-size: 1.05rem; color: var(--amber); }
+.settings-body { padding: 18px 20px; flex: 1; }
+
+fieldset {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; margin-bottom: 14px; background: rgba(0,0,0,0.15);
+}
+legend { color: var(--amber); font-weight: 800; font-size: 0.85rem; padding: 0 6px; }
+.field { margin: 8px 0; }
+.field label { display: block; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 3px; }
+.field input, .field select, .field textarea {
+  width: 100%; background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); padding: 7px 9px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem;
+}
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--amber); }
+.field .hint { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; font-style: italic; }
+
+.mode-toggle {
+  display: flex; border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden; background: var(--bg-sunken);
+}
+.mode-toggle .opt {
+  flex: 1; padding: 7px 10px; text-align: center; cursor: pointer;
+  font-size: 0.8rem; font-weight: 700; color: var(--text-dim);
+  transition: all 0.15s; border: none; background: transparent;
+  font-family: 'Bitter', Georgia, serif;
+}
+.mode-toggle .opt:not(:last-child) { border-right: 1px solid var(--border); }
+.mode-toggle .opt.active { background: var(--amber-dim); color: var(--amber); }
+
+.section-head { font-weight: 800; font-size: 0.85rem; color: var(--text); margin-bottom: 6px; }
+
+.status-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: var(--text-dim); }
+.spin {
+  display: inline-block; width: 12px; height: 12px;
+  border: 2px solid var(--border-hi); border-top-color: var(--amber);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+  vertical-align: middle; margin-right: 4px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast {
+  position: fixed; bottom: 18px; left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--green); color: #111;
+  padding: 9px 16px; border-radius: 8px;
+  font-weight: 700; font-size: 0.83rem;
+  opacity: 0; transition: all 0.3s cubic-bezier(0.22,1,0.36,1);
+  z-index: 600; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--red); color: white; }
+</style>
+</head>
+
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- ═══════ Settings Drawer ═══════ -->
+<div class="settings-overlay" id="settingsOverlay"></div>
+<div class="settings-drawer" id="settingsDrawer">
+  <div class="settings-header">
+    <h2>⚙ Settings</h2>
+    <button class="sm" id="closeSettings">✕ Close</button>
+  </div>
+  <div class="settings-body">
+    <fieldset>
+      <legend>Economy (symmetric — both sides)</legend>
+      <div class="field">
+        <label>Starting Bankroll ($) per side</label>
+        <input type="number" id="s_bankroll" value="25" min="3" max="9999">
+      </div>
+      <div class="field">
+        <label>Cost: Best Move (Rank 1)</label>
+        <input type="number" id="s_cost1" value="3" min="0" max="99">
+      </div>
+      <div class="field">
+        <label>Cost: Good Move (Rank 2)</label>
+        <input type="number" id="s_cost2" value="2" min="0" max="99">
+      </div>
+      <div class="field">
+        <label>Cost: Budget Move (Rank 3)</label>
+        <input type="number" id="s_cost3" value="1" min="0" max="99">
+      </div>
+      <div class="field">
+        <label>Free Moves per side</label>
+        <input type="number" id="s_freeMoves" value="1" min="0" max="20">
+        <div class="hint">Play any legal move at no cost. White drags, Black picks any legal move.</div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Engine</legend>
+      <div class="field">
+        <label>Analysis Depth (offers)</label>
+        <input type="number" id="s_depthOffers" value="12" min="4" max="24">
+      </div>
+      <div class="field">
+        <label>Stockfish Depth (auto-play)</label>
+        <input type="number" id="s_depthEngine" value="12" min="4" max="24">
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Opponent</legend>
+      <div class="field">
+        <label>Play Against</label>
+        <div class="mode-toggle" id="modeToggle">
+          <button class="opt active" data-mode="stockfish">♟ Stockfish</button>
+          <button class="opt" data-mode="llm">🧠 LLM (paste)</button>
+        </div>
+        <div class="hint" style="margin-top:5px">LLM mode: copy prompt → paste into any AI → paste JSON back. Zero API cost.</div>
+      </div>
+      <div id="llmExtraSettings" style="display:none">
+        <div class="field">
+          <label>LLM System Prompt</label>
+          <textarea id="s_llmPrompt" rows="5" style="font-size:0.75rem;font-family:'IBM Plex Mono',monospace">You are a world-class chess grandmaster playing Black. You are sharp and tactical.
+
+Given the position and your 3 candidate moves (with costs from your bankroll), choose the best move you can afford. You can also use a FREE move if you have any remaining.
+
+Respond with a single JSON object ONLY:
+{
+  "move": "e7e5",
+  "use_free": false,
+  "reasoning": "Brief explanation (under 200 chars)"
+}
+
+RULES:
+- "move" must be a UCI string
+- If use_free is false, "move" MUST be one of the 3 offered moves
+- If use_free is true, "move" can be ANY legal move (costs no money)
+- No text outside the JSON. Just the JSON object.</textarea>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>🔒 Coming Soon</legend>
+      <div class="field">
+        <label style="color:var(--text-dim)">Opponent Move Bidding</label>
+        <div class="hint">Bid $ to weaken opponent's move selection.</div>
+      </div>
+    </fieldset>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="primary" id="applySettings">Apply & New Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ Main Shell ═══════ -->
+<div class="shell">
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <span class="logo">♟ BetChess <span class="sub">symmetric resource chess</span></span>
+    <div class="topbar-actions">
+      <div class="pills">
+        <div class="pill"><span>Turn</span> <b id="ui_turn">—</b></div>
+        <div class="pill good" id="pillWBank"><span>You</span> <b id="ui_wBank">$—</b></div>
+        <div class="pill black-bank" id="pillBBank"><span>Opp</span> <b id="ui_bBank">$—</b></div>
+        <div class="pill"><span>Move</span> <b id="ui_moveNum">0</b></div>
+      </div>
+      <button class="sm" id="btnSettings">⚙</button>
+    </div>
+  </div>
+
+  <!-- Board Column -->
+  <div class="board-col">
+    <div id="board-wrap">
+      <div id="board"></div>
+      <svg id="arrowSvg"></svg>
+    </div>
+
+    <!-- Dual bankroll bars -->
+    <div class="bank-bars">
+      <div class="bank-bar-wrap">
+        <div class="bank-bar-label">White (you) <span id="wBarLabel"></span></div>
+        <div class="bank-bar"><div class="bank-fill w-fill" id="wBarFill" style="width:100%"></div></div>
+      </div>
+      <div class="vs-label">vs</div>
+      <div class="bank-bar-wrap">
+        <div class="bank-bar-label">Black (opp) <span id="bBarLabel"></span></div>
+        <div class="bank-bar"><div class="bank-fill b-fill" id="bBarFill" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <div class="board-info">
+      <div class="status-line" id="ui_status">Loading engine…</div>
+      <div>
+        <span class="free-tag disabled" id="freeBtn" title="Use a free move">
+          FREE ×<span id="ui_freeCount">0</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="log-box" id="log" style="max-height:110px"></div>
+  </div>
+
+  <!-- Control Column -->
+  <div class="ctrl-col">
+    <div class="btn-row">
+      <button class="primary" id="btnNew">New Game</button>
+      <button id="btnReroll">Re-roll</button>
+      <button class="danger" id="btnResign">Resign</button>
+    </div>
+
+    <div class="section-head" id="offersTitle">Offers</div>
+    <div class="offers" id="offers">
+      <div style="color:var(--text-dim);font-size:0.83rem;font-style:italic">Loading engine…</div>
+    </div>
+
+    <!-- LLM Zone (shown during Black's turn in LLM mode) -->
+    <div class="llm-zone" id="llmZone" style="display:none">
+      <div class="llm-zone-header">
+        <span class="title">🧠 LLM Opponent — Paste Loop</span>
+        <span class="step-badge" id="llmStep">Step 1: Copy</span>
+      </div>
+      <div class="llm-zone-body">
+        <div class="instructions">
+          <b>1)</b> Copy prompt → <b>2)</b> Paste into any AI → <b>3)</b> Paste JSON back → <b>4)</b> Parse & Play
+        </div>
+        <div class="llm-prompt-preview" id="llmPromptPreview"></div>
+        <div class="btn-row">
+          <button class="purple sm" id="llmCopyPrompt">📋 Copy Prompt</button>
+          <button class="sm" id="llmCopySchema">📋 Schema</button>
+        </div>
+        <div class="launch-grid">
+          <button class="sm" data-ai="claude">Claude</button>
+          <button class="sm" data-ai="gpt">GPT</button>
+          <button class="sm" data-ai="gemini">Gemini</button>
+          <button class="sm" data-ai="deepseek">DeepSeek</button>
+        </div>
+        <div style="margin-top:12px">
+          <div class="llm-paste-label"><span class="arrow">↓</span> PASTE AI RESPONSE HERE <span class="arrow">↓</span></div>
+          <textarea class="llm-paste-area" id="llmPaste" placeholder='Paste the AI response here (raw JSON or ```json block)&#10;&#10;Example:&#10;{&#10;  "move": "e7e5",&#10;  "use_free": false,&#10;  "reasoning": "Controlling the center"&#10;}'></textarea>
+        </div>
+        <div style="margin-top:8px">
+          <button class="success llm-parse-btn" id="llmParsePlay">🔍 Parse & Play Move</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="sm" id="llmUseSF">♟ Use Stockfish Instead</button>
+        </div>
+        <div class="llm-reasoning" id="llmReasoning">
+          <div class="label">🧠 AI Reasoning</div>
+          <div id="llmReasoningText"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top:6px">Opponent</div>
+    <div class="pill" id="ui_opponent" style="width:fit-content">♟ Stockfish depth 12</div>
+
+    <div class="section-head" style="margin-top:6px">Engine Log</div>
+    <div class="log-box" id="verboseLog" style="max-height:150px"></div>
+  </div>
+
+</div>
+
+<!-- ═══════ Dependencies ═══════ -->
+<script src="https://unpkg.com/jquery@3.5.1/dist/jquery.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+<script>
+(function () {
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  PIECE IMAGES — Wikimedia Commons SVGs
+// ═══════════════════════════════════════════════════════════
+
+const PIECE_URLS = {
+  wK:'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+  wQ:'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+  wR:'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+  wB:'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+  wN:'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+  wP:'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+  bK:'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+  bQ:'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+  bR:'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+  bB:'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+  bN:'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+  bP:'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
+};
+
+// ═══════════════════════════════════════════════════════════
+//  STOCKFISH ENGINE (asm.js, blob-worker)
+// ═══════════════════════════════════════════════════════════
+
+const SF_URL = 'https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js';
+
+class UCIEngine {
+  constructor(){ this.worker=null; this._L=[]; this._Q=Promise.resolve(); }
+  async init(){
+    const blob=new Blob([`importScripts(${JSON.stringify(SF_URL)});`],{type:'application/javascript'});
+    this.worker=new Worker(URL.createObjectURL(blob));
+    this.worker.onmessage=e=>{const l=String(e.data||'').trim();if(l)this._L.forEach(f=>f(l));};
+    this.worker.onerror=e=>vlog('WORKER ERR: '+(e.message||e));
+    await this._w('uciok',()=>this.send('uci'),12e3);
+    await this._w('readyok',()=>this.send('isready'),12e3);
+    this.send('ucinewgame');
+    await this._w('readyok',()=>this.send('isready'),12e3);
+  }
+  send(c){this.worker.postMessage(c);}
+  _w(tok,kick,ms){
+    return new Promise((res,rej)=>{
+      let d=false;
+      const t=setTimeout(()=>{if(!d){d=true;rm();rej(new Error('Timeout:'+tok));}},ms);
+      const fn=l=>{if(!d&&l.includes(tok)){d=true;clearTimeout(t);rm();res();}};
+      const rm=()=>{this._L=this._L.filter(x=>x!==fn);};
+      this._L.push(fn); kick();
+    });
+  }
+  analyze(fen,mpv,depth){this._Q=this._Q.then(()=>this._run(fen,mpv,depth));return this._Q;}
+  _run(fen,mpv,depth){
+    return new Promise((res,rej)=>{
+      const pvs=new Map(); let done=false;
+      const t=setTimeout(()=>{cl();rej(new Error('Analysis timeout'));},18e3);
+      const fn=l=>{
+        if(l.startsWith('info ')){
+          const mp=/multipv\s+(\d+)/.exec(l);
+          const pv=/\bpv\s+([a-h][1-8][a-h][1-8][qrbn]?)/.exec(l);
+          if(!pv)return;
+          const i=mp?+mp[1]:1;
+          let cp=null,mate=null,st='';
+          const mC=/score\s+cp\s+(-?\d+)/.exec(l);
+          const mM=/score\s+mate\s+(-?\d+)/.exec(l);
+          if(mM){mate=+mM[1];st=(mate>0?'#+':'#')+mate;}
+          else if(mC){cp=+mC[1];st=(cp>=0?'+':'')+(cp/100).toFixed(2);}
+          pvs.set(i,{uci:pv[1],cp,mate,scoreText:st});
+        }
+        if(l.startsWith('bestmove ')){
+          if(done)return; done=true; cl();
+          const out=[];
+          for(let i=1;i<=mpv;i++)if(pvs.has(i))out.push({pv:i,...pvs.get(i)});
+          res(out);
+        }
+      };
+      const cl=()=>{clearTimeout(t);this._L=this._L.filter(x=>x!==fn);try{this.send('stop');}catch(_){}};
+      this._L.push(fn);
+      this.send('setoption name MultiPV value '+mpv);
+      this.send('position fen '+fen);
+      this.send('go depth '+depth);
+    });
+  }
+}
+const sfEngine=new UCIEngine();
+
+// ═══════════════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════════════
+
+const SKEY='betchess_v4';
+function defCfg(){return{bankroll:25,cost1:3,cost2:2,cost3:1,freeMoves:1,depthOffers:12,depthEngine:12,mode:'stockfish',llmPrompt:''};}
+function loadCfg(){try{return{...defCfg(),...JSON.parse(localStorage.getItem(SKEY))};}catch(_){return defCfg();}}
+function saveCfg(c){localStorage.setItem(SKEY,JSON.stringify(c));}
+
+function cfgToUI(c){
+  document.getElementById('s_bankroll').value=c.bankroll;
+  document.getElementById('s_cost1').value=c.cost1;
+  document.getElementById('s_cost2').value=c.cost2;
+  document.getElementById('s_cost3').value=c.cost3;
+  document.getElementById('s_freeMoves').value=c.freeMoves;
+  document.getElementById('s_depthOffers').value=c.depthOffers;
+  document.getElementById('s_depthEngine').value=c.depthEngine;
+  if(c.llmPrompt)document.getElementById('s_llmPrompt').value=c.llmPrompt;
+  document.querySelectorAll('#modeToggle .opt').forEach(o=>o.classList.toggle('active',o.dataset.mode===c.mode));
+  document.getElementById('llmExtraSettings').style.display=c.mode==='llm'?'block':'none';
+}
+function cfgFromUI(){
+  const mode=document.querySelector('#modeToggle .opt.active')?.dataset.mode||'stockfish';
+  return{
+    bankroll:Math.max(1,+document.getElementById('s_bankroll').value||25),
+    cost1:Math.max(0,+document.getElementById('s_cost1').value),
+    cost2:Math.max(0,+document.getElementById('s_cost2').value),
+    cost3:Math.max(0,+document.getElementById('s_cost3').value),
+    freeMoves:Math.max(0,+document.getElementById('s_freeMoves').value||0),
+    depthOffers:Math.max(4,+document.getElementById('s_depthOffers').value||12),
+    depthEngine:Math.max(4,+document.getElementById('s_depthEngine').value||12),
+    mode,
+    llmPrompt:document.getElementById('s_llmPrompt').value,
+  };
+}
+let CFG=loadCfg();
+
+// ═══════════════════════════════════════════════════════════
+//  GAME STATE — Symmetric budgets
+// ═══════════════════════════════════════════════════════════
+
+let game       = new Chess();
+let board      = null;
+let wBank, bBank;          // bankrolls
+let wFree, bFree;          // remaining free moves
+let moveNum    = 0;
+let freeMode   = false;    // board draggable for White's free move
+let locked     = false;
+let whiteOffers = [];      // current White offers
+let blackOffers = [];      // current Black offers (for LLM prompt + validation)
+let llmPromptText = '';
+
+// ═══════════════════════════════════════════════════════════
+//  UI REFERENCES
+// ═══════════════════════════════════════════════════════════
+
+const $turn=document.getElementById('ui_turn');
+const $wBank=document.getElementById('ui_wBank');
+const $bBank=document.getElementById('ui_bBank');
+const $moveNum=document.getElementById('ui_moveNum');
+const $status=document.getElementById('ui_status');
+const $offers=document.getElementById('offers');
+const $log=document.getElementById('log');
+const $vlog=document.getElementById('verboseLog');
+const $freeBtn=document.getElementById('freeBtn');
+const $freeCount=document.getElementById('ui_freeCount');
+const $opponent=document.getElementById('ui_opponent');
+const $llmZone=document.getElementById('llmZone');
+const $arrowSvg=document.getElementById('arrowSvg');
+
+function toast(m,ok=true){const t=document.getElementById('toast');t.className='toast'+(ok?'':' err');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function mlog(s){$log.textContent=($log.textContent?$log.textContent+'\n':'')+s;$log.scrollTop=$log.scrollHeight;}
+function vlog(s){$vlog.textContent=($vlog.textContent?$vlog.textContent+'\n':'')+s;$vlog.scrollTop=$vlog.scrollHeight;}
+function setStatus(h){$status.innerHTML=h;}
+function money(n){return'$'+Math.max(0,n).toLocaleString(undefined,{maximumFractionDigits:0});}
+
+// ═══════════════════════════════════════════════════════════
+//  MOVE HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function uciToObj(u){const f=u.slice(0,2),t=u.slice(2,4),p=u.length>4?u[4]:undefined;return p?{from:f,to:t,promotion:p}:{from:f,to:t};}
+function uciToSAN(u){const t=new Chess(game.fen());const m=t.move(uciToObj(u));return m?m.san:u;}
+function isGameOver(){
+  if(game.in_checkmate())return(game.turn()==='w'?'Black':'White')+' wins by checkmate!';
+  if(game.in_stalemate())return'Stalemate — draw.';
+  if(game.in_threefold_repetition())return'Threefold repetition — draw.';
+  if(game.insufficient_material())return'Insufficient material — draw.';
+  if(game.in_draw())return'Draw.';
+  return null;
+}
+function costs(){return[CFG.cost1,CFG.cost2,CFG.cost3];}
+
+// ═══════════════════════════════════════════════════════════
+//  SVG ARROW OVERLAY SYSTEM
+//
+//  Renders dashed lines from source → destination for each
+//  offer. Destinations are clickable cost-badge circles.
+//  Handles multiple moves from the same source via angular
+//  offset ("fan" effect).
+// ═══════════════════════════════════════════════════════════
+
+const ARROW_COLORS=['#e8b04a','#4ecdc4','#a78bfa']; // gold, teal, lavender
+
+// SVG namespace helper
+function svg(tag,attrs){
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const[k,v]of Object.entries(attrs||{}))el.setAttribute(k,String(v));
+  return el;
+}
+
+// Convert chess square to pixel coordinates (white orientation)
+function sqToXY(sq,sqSz){
+  const col=sq.charCodeAt(0)-97; // a=0..h=7
+  const row=parseInt(sq[1])-1;   // 1=0..8=7
+  return{x:(col+0.5)*sqSz, y:(7-row+0.5)*sqSz};
+}
+
+// Render arrows on the SVG for a set of offers
+function renderArrows(offers, onClickOffer){
+  $arrowSvg.innerHTML='';
+  if(!offers.length)return;
+
+  // Get board pixel dimensions
+  const boardEl=document.getElementById('board');
+  const w=boardEl.offsetWidth;
+  const h=boardEl.offsetHeight||w;
+  if(w<10)return; // not rendered yet
+
+  const sqSz=w/8;
+  $arrowSvg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  $arrowSvg.setAttribute('width',w);
+  $arrowSvg.setAttribute('height',h);
+
+  // Count offers per source square (for fan offset)
+  const srcCounts={};
+  const srcIdx={};
+  offers.forEach((o,i)=>{
+    srcCounts[o.from]=(srcCounts[o.from]||0)+1;
+    srcIdx[i]=srcCounts[o.from]-1;
+  });
+
+  const destR=sqSz*0.30; // destination circle radius
+  const srcR=sqSz*0.12;  // source dot radius
+
+  offers.forEach((o,i)=>{
+    const color=ARROW_COLORS[i]||ARROW_COLORS[2];
+    const from=sqToXY(o.from,sqSz);
+    const to=sqToXY(o.to,sqSz);
+
+    // Fan offset: perpendicular displacement when multiple arrows share a source
+    const total=srcCounts[o.from];
+    const idx=srcIdx[i];
+    let fx=from.x, fy=from.y;
+    if(total>1){
+      const dx=to.x-from.x, dy=to.y-from.y;
+      const len=Math.sqrt(dx*dx+dy*dy)||1;
+      const perpX=-dy/len, perpY=dx/len;
+      const spread=(idx-(total-1)/2)*sqSz*0.18;
+      fx+=perpX*spread;
+      fy+=perpY*spread;
+    }
+
+    // Shorten line end so it stops at circle edge, not center
+    const dx=to.x-fx, dy=to.y-fy;
+    const len=Math.sqrt(dx*dx+dy*dy)||1;
+    const endX=to.x-(dx/len)*(destR+2);
+    const endY=to.y-(dy/len)*(destR+2);
+
+    // Group for this arrow
+    const g=svg('g',{'class':'arrow-group','data-idx':i});
+
+    // Source dot
+    g.appendChild(svg('circle',{cx:fx,cy:fy,r:srcR,fill:color,'fill-opacity':0.5,stroke:color,'stroke-width':1.5}));
+
+    // Dashed line
+    g.appendChild(svg('line',{
+      x1:fx,y1:fy,x2:endX,y2:endY,
+      stroke:color,'stroke-width':3,'stroke-dasharray':'8,5',
+      opacity:0.65,'class':'arrow-line'
+    }));
+
+    // Destination group (clickable)
+    const dg=svg('g',{'class':'arrow-hit','data-idx':i});
+
+    // Outer circle (hit area)
+    dg.appendChild(svg('circle',{cx:to.x,cy:to.y,r:destR+4,fill:'transparent'}));
+
+    // Visible circle
+    dg.appendChild(svg('circle',{
+      cx:to.x,cy:to.y,r:destR,
+      fill:color,'fill-opacity':0.2,
+      stroke:color,'stroke-width':2.5,
+      opacity:0.8,'class':'dest-circle'
+    }));
+
+    // Cost label
+    const txt=svg('text',{
+      x:to.x, y:to.y+1,
+      'text-anchor':'middle','dominant-baseline':'central',
+      fill:'white','font-size':Math.max(10,sqSz*0.22),
+      'font-weight':'bold','font-family':'IBM Plex Mono, monospace',
+      'pointer-events':'none'
+    });
+    txt.textContent='$'+o.cost;
+    dg.appendChild(txt);
+
+    // SAN label (below cost, smaller)
+    const san=svg('text',{
+      x:to.x, y:to.y+destR+Math.max(9,sqSz*0.16),
+      'text-anchor':'middle',
+      fill:color,'font-size':Math.max(8,sqSz*0.16),
+      'font-weight':'700','font-family':'IBM Plex Mono, monospace',
+      'pointer-events':'none',opacity:0.85
+    });
+    san.textContent=o.san;
+    dg.appendChild(san);
+
+    // Click handler
+    dg.addEventListener('click',()=>{ if(onClickOffer)onClickOffer(o); });
+
+    // Hover: dim other arrows, highlight this one
+    dg.addEventListener('mouseenter',()=>highlightArrow(i));
+    dg.addEventListener('mouseleave',()=>unhighlightArrows());
+
+    g.appendChild(dg);
+    $arrowSvg.appendChild(g);
+  });
+}
+
+function highlightArrow(idx){
+  // Dim all, brighten target
+  $arrowSvg.querySelectorAll('.arrow-group').forEach(g=>{
+    g.classList.toggle('dim',+g.dataset.idx!==idx);
+  });
+  // Also highlight corresponding sidebar offer card
+  document.querySelectorAll('.offer[data-idx]').forEach(c=>{
+    c.classList.toggle('hl',+c.dataset.idx===idx);
+  });
+}
+function unhighlightArrows(){
+  $arrowSvg.querySelectorAll('.arrow-group').forEach(g=>g.classList.remove('dim'));
+  document.querySelectorAll('.offer[data-idx]').forEach(c=>c.classList.remove('hl'));
+}
+
+function clearArrows(){$arrowSvg.innerHTML='';}
+
+// ═══════════════════════════════════════════════════════════
+//  UI SYNC
+// ═══════════════════════════════════════════════════════════
+
+function syncUI(){
+  $turn.textContent=game.turn()==='w'?'White':'Black';
+  $wBank.textContent=money(wBank);
+  $bBank.textContent=money(bBank);
+  $moveNum.textContent=moveNum;
+
+  // Bankroll bars
+  const wp=Math.max(0,Math.min(100,(wBank/CFG.bankroll)*100));
+  const bp=Math.max(0,Math.min(100,(bBank/CFG.bankroll)*100));
+  const wf=document.getElementById('wBarFill');
+  const bf=document.getElementById('bBarFill');
+  wf.style.width=wp+'%'; wf.className='bank-fill w-fill'+(wp<25?' low':'');
+  bf.style.width=bp+'%'; bf.className='bank-fill b-fill'+(bp<25?' low':'');
+  document.getElementById('wBarLabel').textContent=money(wBank)+' · free:'+wFree;
+  document.getElementById('bBarLabel').textContent=money(bBank)+' · free:'+bFree;
+
+  // Pills
+  document.getElementById('pillWBank').className='pill '+(wBank>CFG.bankroll*0.33?'good':wBank>0?'warn':'bad');
+  document.getElementById('pillBBank').className='pill '+(bBank>CFG.bankroll*0.33?'black-bank':bBank>0?'warn':'bad');
+
+  // Free button
+  $freeCount.textContent=wFree;
+  $freeBtn.className='free-tag'+(wFree<=0||game.turn()!=='w'||locked?' disabled':'');
+  $freeBtn.style.background=freeMode?'rgba(92,204,111,0.25)':'';
+  $freeBtn.style.borderColor=freeMode?'rgba(92,204,111,0.6)':'';
+
+  // Opponent label
+  $opponent.textContent=CFG.mode==='llm'?'🧠 LLM (copy-paste)':'♟ Stockfish depth '+CFG.depthEngine;
+
+  const over=isGameOver();
+  if(over){setStatus(over);hideLLM();return;}
+  if(wBank<=0&&wFree<=0&&game.turn()==='w'){setStatus('💀 You\'re bankrupt — you lose!');hideLLM();return;}
+  if(bBank<=0&&bFree<=0&&game.turn()==='b'){setStatus('💀 Opponent bankrupt — you win!');hideLLM();return;}
+}
+function syncBoard(){board.position(game.fen(),true);syncUI();}
+
+// ═══════════════════════════════════════════════════════════
+//  OFFER GENERATION (used for both sides)
+//  Returns array of {uci, san, from, to, cost, scoreText, cp, mate}
+// ═══════════════════════════════════════════════════════════
+
+async function generateOffers(fen, depth){
+  let raw;
+  try{raw=await sfEngine.analyze(fen,3,depth);}
+  catch(e){vlog('ERR: '+e.message);return[];}
+
+  // Pad to 3 with remaining legal moves if needed
+  const tmp=new Chess(fen);
+  const legals=tmp.moves({verbose:true}).map(m=>m.from+m.to+(m.promotion||''));
+  const seen=new Set(raw.map(o=>o.uci));
+  for(const u of legals){
+    if(raw.length>=3)break;
+    if(!seen.has(u)){raw.push({pv:raw.length+1,uci:u,cp:null,mate:null,scoreText:'?'});seen.add(u);}
+  }
+
+  const cs=costs();
+  return raw.slice(0,3).map((o,i)=>{
+    const san=(()=>{const t=new Chess(fen);const m=t.move(uciToObj(o.uci));return m?m.san:o.uci;})();
+    return{...o,cost:cs[i]||0,san,from:o.uci.slice(0,2),to:o.uci.slice(2,4)};
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BUILD + RENDER WHITE'S OFFERS
+// ═══════════════════════════════════════════════════════════
+
+async function buildWhiteOffers(){
+  if(game.turn()!=='w')return;
+  if(wBank<=0&&wFree<=0)return;
+
+  whiteOffers=[];
+  $offers.innerHTML='';
+  clearArrows();
+  hideLLM();
+  setStatus('<span class="spin"></span> Analyzing 3 offers…');
+  vlog(`── Move ${moveNum+1}: MultiPV=3, depth=${CFG.depthOffers}…`);
+
+  whiteOffers=await generateOffers(game.fen(),CFG.depthOffers);
+  if(!whiteOffers.length){setStatus('No offers (engine error).');return;}
+
+  renderOfferCards(whiteOffers,wBank,o=>playWhiteOffer(o));
+  renderArrows(whiteOffers,o=>playWhiteOffer(o));
+  setStatus('Pick an offer'+(wFree>0?' or use FREE':'')+ ' ↓');
+  vlog('3 offers ready.');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER OFFER CARDS (sidebar — used for both sides)
+// ═══════════════════════════════════════════════════════════
+
+function renderOfferCards(offers, bank, onClick){
+  $offers.innerHTML='';
+  const rc=['r1','r2','r3'];
+  offers.forEach((o,i)=>{
+    const afford=bank>=o.cost||o.cost===0;
+    const row=document.createElement('div');
+    row.className='offer'; row.dataset.idx=i;
+
+    // Hover cross-ref with arrows
+    row.addEventListener('mouseenter',()=>highlightArrow(i));
+    row.addEventListener('mouseleave',()=>unhighlightArrows());
+
+    const rank=document.createElement('div');
+    rank.className='rank '+rc[i]; rank.textContent=i+1;
+
+    const info=document.createElement('div');
+    info.className='move-info';
+    const s=document.createElement('div');s.className='san';s.textContent=o.san;
+    const e=document.createElement('div');e.className='eval';e.textContent=`eval ${o.scoreText||'—'}  ·  ${o.uci}`;
+    info.appendChild(s);info.appendChild(e);
+
+    const right=document.createElement('div');right.className='right';
+    const cost=document.createElement('div');cost.className='cost';cost.textContent=o.cost>0?`$${o.cost}`:'FREE';
+    const btn=document.createElement('button');
+    btn.className=afford?'primary sm':'sm';
+    btn.textContent=afford?'Play':'Broke';
+    btn.disabled=!afford;
+    btn.onclick=()=>onClick(o);
+    right.appendChild(cost);right.appendChild(btn);
+
+    row.appendChild(rank);row.appendChild(info);row.appendChild(right);
+    $offers.appendChild(row);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WHITE MOVE EXECUTION
+// ═══════════════════════════════════════════════════════════
+
+async function playWhiteOffer(offer){
+  if(locked||game.turn()!=='w')return;
+  if(wBank<offer.cost&&offer.cost>0)return;
+  locked=true;
+  exitFreeMode(); clearArrows();
+
+  wBank-=offer.cost;
+  moveNum++;
+  mlog(`${moveNum}. ${offer.san}  (−$${offer.cost}, you ${money(wBank)})`);
+
+  const m=game.move(uciToObj(offer.uci));
+  if(!m){vlog('!! Illegal: '+offer.uci);locked=false;return;}
+
+  whiteOffers=[];
+  $offers.innerHTML='';
+  syncBoard();
+
+  if(checkEndConditions()){locked=false;return;}
+
+  await playBlack();
+  locked=false;
+}
+
+async function playWhiteFree(from,to,promo){
+  if(locked||game.turn()!=='w'||wFree<=0)return'snapback';
+  locked=true;
+  const obj=promo?{from,to,promotion:promo}:{from,to};
+  const m=game.move(obj);
+  if(!m){locked=false;return'snapback';}
+
+  wFree--;moveNum++;
+  mlog(`${moveNum}. ${m.san}  (FREE, you ${money(wBank)})`);
+  exitFreeMode();clearArrows();
+  whiteOffers=[];$offers.innerHTML='';
+  syncBoard();
+
+  if(checkEndConditions()){locked=false;return;}
+
+  await playBlack();
+  locked=false;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BLACK MOVE EXECUTION
+//
+//  Both modes generate 3 Stockfish offers for Black first.
+//  Stockfish mode: auto-picks best affordable.
+//  LLM mode: shows paste zone with Black's 3 offers.
+// ═══════════════════════════════════════════════════════════
+
+async function playBlack(){
+  if(game.turn()!=='b')return;
+
+  // Check if Black is bankrupt before even generating offers
+  if(bBank<=0&&bFree<=0){
+    setStatus('💀 Opponent bankrupt — you win!');
+    mlog('OPPONENT BANKRUPT.');
+    return;
+  }
+
+  setStatus('<span class="spin"></span> Generating Black\'s 3 offers…');
+  vlog('Generating Black offers (MultiPV=3)…');
+
+  // Generate Black's 3 offers (same pricing as White)
+  blackOffers=await generateOffers(game.fen(),CFG.depthOffers);
+  if(!blackOffers.length){
+    setStatus('No black offers (error).');
+    return;
+  }
+
+  vlog('Black offers: '+blackOffers.map((o,i)=>`${i+1})${o.san}=$${o.cost}`).join(', '));
+
+  if(CFG.mode==='llm'){
+    // ── LLM: show paste zone with Black's offers ──
+    showLLM();
+    // Also show Black's offers on the board so user can see what the LLM is choosing from
+    renderOfferCards(blackOffers,bBank,()=>{}); // non-clickable for user
+    renderArrows(blackOffers,()=>{}); // visual only
+    document.getElementById('offersTitle').textContent="Black's Offers (LLM choosing)";
+  } else {
+    // ── Stockfish: auto-pick best affordable ──
+    await sfAutoPick();
+  }
+}
+
+async function sfAutoPick(){
+  setStatus('<span class="spin"></span> Stockfish choosing…');
+
+  // Pick best affordable offer
+  let picked=null;
+  for(const o of blackOffers){
+    if(bBank>=o.cost){picked=o;break;}
+  }
+
+  // If can't afford any, try free move (play rank 1 for free)
+  if(!picked&&bFree>0){
+    bFree--;
+    picked=blackOffers[0]; // best move, for free
+    mlog(`   …${picked.san}  (SF FREE, opp ${money(bBank)})`);
+    executeBlackUCI(picked.uci);
+    clearArrows();$offers.innerHTML='';
+    if(!checkEndConditions())await buildWhiteOffers();
+    return;
+  }
+
+  if(!picked){
+    setStatus('💀 Opponent bankrupt — you win!');
+    mlog('OPPONENT BANKRUPT.');
+    return;
+  }
+
+  bBank-=picked.cost;
+  mlog(`   …${picked.san}  (−$${picked.cost}, opp ${money(bBank)})`);
+
+  executeBlackUCI(picked.uci);
+
+  // Brief flash of the move
+  renderArrows([picked],()=>{});
+  setTimeout(()=>{clearArrows();$offers.innerHTML='';},350);
+
+  syncBoard();
+  if(!checkEndConditions())await buildWhiteOffers();
+}
+
+function executeBlackUCI(uci){
+  const san=(()=>{const t=new Chess(game.fen());const m=t.move(uciToObj(uci));return m?m.san:uci;})();
+  const m=game.move(uciToObj(uci));
+  if(!m){vlog('!! Illegal black: '+uci);setStatus('Illegal opponent move.');return false;}
+  syncBoard();
+  return true;
+}
+
+function checkEndConditions(){
+  const over=isGameOver();
+  if(over){setStatus(over);mlog('GAME OVER: '+over);hideLLM();clearArrows();return true;}
+  if(wBank<=0&&wFree<=0&&game.turn()==='w'){setStatus('💀 Bankrupt — you lose!');mlog('BANKRUPT.');hideLLM();return true;}
+  if(bBank<=0&&bFree<=0&&game.turn()==='b'){setStatus('💀 Opponent bankrupt — you win!');mlog('OPP BANKRUPT.');hideLLM();return true;}
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LLM PASTE ZONE (Prymis-style with budget)
+//
+//  Prompt includes: FEN, ASCII board, PGN, legal moves,
+//  Black's 3 priced offers, Black's budget + free moves,
+//  system prompt, strict JSON schema.
+// ═══════════════════════════════════════════════════════════
+
+function buildLLMPrompt(){
+  const fen=game.fen();
+  const hist=game.history();
+  const histUCI=game.history({verbose:true}).map(m=>m.from+m.to+(m.promotion||''));
+  const ascii=game.ascii();
+  const allLegal=game.moves({verbose:true}).map(m=>({san:m.san,uci:m.from+m.to+(m.promotion||'')}));
+
+  let pgn='';
+  for(let i=0;i<hist.length;i++){if(i%2===0)pgn+=Math.floor(i/2+1)+'. ';pgn+=hist[i]+' ';}
+
+  const sys=CFG.llmPrompt||document.getElementById('s_llmPrompt').value;
+
+  // Format Black's 3 offers with costs and evals
+  const offersBlock=blackOffers.map((o,i)=>{
+    const label=['BEST','GOOD','BUDGET'][i]||'';
+    return`  Rank ${i+1} (${label}): ${o.uci}  (${o.san})  eval: ${o.scoreText||'?'}  →  Cost: $${o.cost}`;
+  }).join('\n');
+
+  return `${sys}
+
+═══════════════════════════════════════
+CURRENT POSITION
+═══════════════════════════════════════
+
+FEN: ${fen}
+
+${ascii}
+
+PGN: ${pgn.trim()||'(opening position)'}
+UCI: ${histUCI.join(' ')||'(none)'}
+
+It is BLACK's turn. Move ${Math.ceil((hist.length+1)/2)}.
+
+═══════════════════════════════════════
+YOUR BUDGET (Black)
+═══════════════════════════════════════
+
+Bankroll: $${bBank} of $${CFG.bankroll}
+Free moves remaining: ${bFree}
+
+YOUR 3 CANDIDATE MOVES (Stockfish-analyzed, priced by quality):
+${offersBlock}
+
+If you choose a candidate move, its cost is deducted from your bankroll.
+If you set "use_free": true, you can play ANY legal move at no cost (uses 1 free move).
+${bFree<=0?'⚠ You have NO free moves left — you MUST choose from the 3 candidates.':''}
+
+═══════════════════════════════════════
+ALL LEGAL MOVES (${allLegal.length})
+═══════════════════════════════════════
+
+${allLegal.map(m=>`${m.uci} (${m.san})`).join('\n')}
+
+═══════════════════════════════════════
+OUTPUT — JSON ONLY
+═══════════════════════════════════════
+
+{
+  "move": "UCI string",
+  "use_free": false,
+  "reasoning": "Brief explanation (under 200 chars)"
+}
+
+RULES:
+- If use_free is false → "move" MUST be one of the 3 candidate UCI strings above.
+- If use_free is true → "move" can be any legal UCI string (costs $0, uses 1 free move).
+- No text outside the JSON.
+
+Choose now.`;
+}
+
+function showLLM(){
+  llmPromptText=buildLLMPrompt();
+  $llmZone.style.display='block';
+  $llmZone.classList.add('active'); // pulse animation
+  document.getElementById('llmStep').textContent='Step 1: Copy prompt';
+  document.getElementById('llmPromptPreview').textContent=llmPromptText;
+  document.getElementById('llmPaste').value='';
+  document.getElementById('llmReasoning').classList.remove('show');
+  setStatus('Waiting for LLM… (copy → paste to AI → paste JSON back)');
+  vlog('LLM prompt ready ('+llmPromptText.length+' chars)');
+  // Scroll the paste zone into view and focus it
+  setTimeout(()=>{
+    $llmZone.scrollIntoView({behavior:'smooth',block:'center'});
+    document.getElementById('llmPaste').focus();
+  },150);
+}
+function hideLLM(){$llmZone.style.display='none';$llmZone.classList.remove('active');document.getElementById('offersTitle').textContent='Offers';}
+
+function parseLLMJSON(raw){
+  const t=raw.trim();if(!t)return null;
+  try{return JSON.parse(t);}catch(_){}
+  const m1=t.match(/```json\s*([\s\S]*?)\s*```/i);if(m1)try{return JSON.parse(m1[1]);}catch(_){}
+  const m2=t.match(/```\s*([\s\S]*?)\s*```/i);if(m2)try{return JSON.parse(m2[1]);}catch(_){}
+  const m3=t.match(/\{[\s\S]*"move"\s*:\s*"[a-h][1-8][a-h][1-8][qrbn]?"[\s\S]*\}/);
+  if(m3)try{return JSON.parse(m3[0]);}catch(_){}
+  return null;
+}
+
+// LLM Zone handlers
+document.getElementById('llmCopyPrompt').onclick=()=>{
+  if(!llmPromptText){toast('No prompt',false);return;}
+  navigator.clipboard.writeText(llmPromptText).then(()=>{
+    toast('Prompt copied!');
+    document.getElementById('llmStep').textContent='Step 2: Paste to AI';
+  });
+};
+document.getElementById('llmCopySchema').onclick=()=>{
+  navigator.clipboard.writeText(JSON.stringify({move:"e7e5",use_free:false,reasoning:"explanation"},null,2)).then(()=>toast('Schema copied'));
+};
+
+document.querySelectorAll('.launch-grid button[data-ai]').forEach(btn=>{
+  btn.onclick=()=>{
+    if(!llmPromptText){toast('No prompt',false);return;}
+    const urls={claude:'https://claude.ai/new',gpt:'https://chat.openai.com/',gemini:'https://gemini.google.com/',deepseek:'https://chat.deepseek.com/'};
+    navigator.clipboard.writeText(llmPromptText).then(()=>{
+      window.open(urls[btn.dataset.ai]||urls.claude,'_blank');
+      toast('Copied → opening…');
+      document.getElementById('llmStep').textContent='Step 3: Paste JSON back';
+    });
+  };
+});
+
+// Parse & Play — core paste-back handler
+document.getElementById('llmParsePlay').onclick=async()=>{
+  console.log('[BetChess] Parse & Play clicked');
+  const raw=document.getElementById('llmPaste').value.trim();
+  if(!raw){toast('Paste the AI response first!',false);console.log('[BetChess] Empty paste area');return;}
+
+  console.log('[BetChess] Raw input length:', raw.length);
+  const obj=parseLLMJSON(raw);
+  if(!obj){toast('Cannot parse JSON — paste the full AI response (including ```json blocks)',false);console.log('[BetChess] JSON parse failed, raw:', raw.slice(0,200));return;}
+
+  const moveUci=(obj.move||'').trim().toLowerCase();
+  if(!moveUci){toast('No "move" field',false);return;}
+
+  const useFree=!!obj.use_free;
+  const allLegal=game.moves({verbose:true}).map(m=>m.from+m.to+(m.promotion||''));
+  const offerUcis=blackOffers.map(o=>o.uci);
+
+  // Validate move
+  if(useFree){
+    // Free move: any legal move, but must have free moves left
+    if(bFree<=0){toast('LLM tried free move but has 0 remaining',false);return;}
+    if(!allLegal.includes(moveUci)){toast(`Illegal move: "${moveUci}"`,false);return;}
+    bFree--;
+    vlog(`LLM uses FREE move: ${moveUci}`);
+    mlog(`   …${uciToSAN(moveUci)}  (LLM FREE, opp ${money(bBank)})`);
+  } else {
+    // Must be one of the 3 offers
+    if(!offerUcis.includes(moveUci)){
+      toast(`Move "${moveUci}" not in the 3 offers`,false);
+      vlog('Rejected: not in offers. Offered: '+offerUcis.join(', '));
+      return;
+    }
+    const offer=blackOffers.find(o=>o.uci===moveUci);
+    if(bBank<offer.cost){toast(`Can't afford $${offer.cost} (bank $${bBank})`,false);return;}
+    bBank-=offer.cost;
+    vlog(`LLM picks: ${moveUci} ($${offer.cost})`);
+    mlog(`   …${offer.san}  (−$${offer.cost}, opp ${money(bBank)})`);
+  }
+
+  // Show reasoning
+  const reason=(obj.reasoning||obj.reason||'').trim();
+  if(reason){
+    document.getElementById('llmReasoningText').textContent=reason;
+    document.getElementById('llmReasoning').classList.add('show');
+    vlog('LLM reasoning: '+reason);
+  }
+
+  executeBlackUCI(moveUci);
+  hideLLM();clearArrows();$offers.innerHTML='';
+  document.getElementById('offersTitle').textContent='Offers';
+
+  setTimeout(()=>{
+    if(!checkEndConditions())buildWhiteOffers();
+  },300);
+};
+
+// Stockfish fallback
+document.getElementById('llmUseSF').onclick=async()=>{
+  hideLLM();clearArrows();$offers.innerHTML='';
+  document.getElementById('offersTitle').textContent='Offers';
+  vlog('Falling back to Stockfish.');
+  await sfAutoPick();
+  if(!checkEndConditions())await buildWhiteOffers();
+};
+
+// ═══════════════════════════════════════════════════════════
+//  FREE MOVE MODE (White only — drag pieces)
+// ═══════════════════════════════════════════════════════════
+
+function enterFreeMode(){
+  if(wFree<=0||game.turn()!=='w'||locked)return;
+  freeMode=true;
+  clearArrows();
+  board=rebuildBoard(true);
+  syncUI();
+  setStatus('Drag a piece for a FREE move.');
+}
+function exitFreeMode(){
+  if(!freeMode)return;
+  freeMode=false;
+  board=rebuildBoard(false);
+  syncUI();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BOARD BUILDER
+// ═══════════════════════════════════════════════════════════
+
+function rebuildBoard(drag){
+  return Chessboard('board',{
+    position:game.fen(),
+    orientation:'white',
+    draggable:!!drag,
+    pieceTheme:p=>PIECE_URLS[p]||'',
+    onDragStart:(src,piece)=>{
+      if(!freeMode||game.game_over()||game.turn()!=='w')return false;
+      if(piece.search(/^b/)!==-1)return false;
+      return true;
+    },
+    onDrop:(src,tgt)=>{
+      const pc=game.get(src);
+      const isP=pc&&pc.type==='p'&&((pc.color==='w'&&tgt[1]==='8')||(pc.color==='b'&&tgt[1]==='1'));
+      const promo=isP?'q':undefined;
+      const t=new Chess(game.fen());
+      if(!t.move(promo?{from:src,to:tgt,promotion:promo}:{from:src,to:tgt}))return'snapback';
+      playWhiteFree(src,tgt,promo);
+    },
+    onSnapEnd:()=>{board.position(game.fen());}
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SETTINGS UI
+// ═══════════════════════════════════════════════════════════
+
+function openSettings(){cfgToUI(CFG);document.getElementById('settingsOverlay').classList.add('open');document.getElementById('settingsDrawer').classList.add('open');}
+function closeSettings(){document.getElementById('settingsOverlay').classList.remove('open');document.getElementById('settingsDrawer').classList.remove('open');}
+
+document.getElementById('btnSettings').onclick=openSettings;
+document.getElementById('closeSettings').onclick=closeSettings;
+document.getElementById('settingsOverlay').onclick=closeSettings;
+
+document.querySelectorAll('#modeToggle .opt').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('#modeToggle .opt').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('llmExtraSettings').style.display=btn.dataset.mode==='llm'?'block':'none';
+  };
+});
+
+document.getElementById('applySettings').onclick=async()=>{
+  CFG=cfgFromUI();saveCfg(CFG);closeSettings();toast('Settings applied');await startNewGame();
+};
+
+// ═══════════════════════════════════════════════════════════
+//  GAME LIFECYCLE
+// ═══════════════════════════════════════════════════════════
+
+async function startNewGame(){
+  if(locked)return;locked=true;
+  game.reset();
+  wBank=CFG.bankroll; bBank=CFG.bankroll;
+  wFree=CFG.freeMoves; bFree=CFG.freeMoves;
+  moveNum=0;freeMode=false;
+  whiteOffers=[];blackOffers=[];
+
+  $offers.innerHTML='';$log.textContent='';$vlog.textContent='';
+  clearArrows();hideLLM();
+  document.getElementById('offersTitle').textContent='Offers';
+
+  board=rebuildBoard(false);
+  mlog('═══ New Game ═══');
+  mlog(`Bank: ${money(wBank)} each · Free: ${wFree} each · Mode: ${CFG.mode}`);
+  syncUI();
+  await buildWhiteOffers();
+  locked=false;
+}
+
+document.getElementById('btnNew').onclick=startNewGame;
+document.getElementById('btnReroll').onclick=async()=>{
+  if(locked||game.turn()!=='w')return;locked=true;
+  clearArrows();vlog('Re-rolling…');
+  await buildWhiteOffers();locked=false;
+};
+document.getElementById('btnResign').onclick=()=>{
+  if(locked)return;setStatus('You resigned.');
+  whiteOffers=[];$offers.innerHTML='';clearArrows();hideLLM();mlog('RESIGNED.');
+};
+$freeBtn.onclick=()=>{
+  if(wFree<=0||game.turn()!=='w'||locked)return;
+  freeMode?exitFreeMode():enterFreeMode();
+};
+
+// Redraw arrows on resize
+window.addEventListener('resize',()=>{
+  if(whiteOffers.length&&game.turn()==='w')renderArrows(whiteOffers,o=>playWhiteOffer(o));
+  else if(blackOffers.length&&game.turn()==='b'&&CFG.mode==='llm')renderArrows(blackOffers,()=>{});
+});
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+
+async function init(){
+  CFG=loadCfg();cfgToUI(CFG);
+  wBank=CFG.bankroll;bBank=CFG.bankroll;
+  wFree=CFG.freeMoves;bFree=CFG.freeMoves;
+
+  board=rebuildBoard(false);
+  syncUI();
+  mlog('Loading Stockfish…');vlog('Loading Stockfish (asm.js)…');
+  setStatus('<span class="spin"></span> Loading engine…');
+
+  try{await sfEngine.init();}catch(e){
+    setStatus('Stockfish failed.');vlog('INIT ERR: '+e.message);toast('Engine failed',false);return;
+  }
+
+  vlog('Stockfish ready.');mlog('Engine ready.');setStatus('Ready!');
+  await buildWhiteOffers();
+}
+
+init();
+
+})();
+</script>
+</body>
+</html>
