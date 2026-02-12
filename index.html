@@ -5,262 +5,527 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>BetChess — 3 Offers, Bankroll, Stockfish</title>
 
-  <!-- chessboard.js -->
+  <!-- chessboard.js CSS -->
   <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+
+  <!-- Google Font for distinctive typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+
   <style>
-    :root{
-      --bg:#0f1115; --panel:#161a22; --muted:#9aa4b2; --text:#e7eaf0;
-      --accent:#f59e0b; --good:#10b981; --bad:#ef4444; --border:#2a3242;
+    :root {
+      --bg: #0a0c10;
+      --panel: #12151c;
+      --panel-glass: rgba(18, 21, 28, 0.92);
+      --muted: #6b7a90;
+      --text: #e2e6ed;
+      --accent: #f5a623;
+      --accent-dim: rgba(245, 166, 35, 0.12);
+      --good: #34d399;
+      --good-dim: rgba(52, 211, 153, 0.12);
+      --bad: #f87171;
+      --bad-dim: rgba(248, 113, 113, 0.12);
+      --border: #1e2533;
+      --border-light: #2a3345;
+      --glow: rgba(245, 166, 35, 0.08);
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0; background:linear-gradient(135deg,#0b0d12,var(--bg));
-      color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      min-height:100vh; display:flex; align-items:center; justify-content:center; padding:18px;
-    }
-    .wrap{
-      width:min(1100px,100%); display:grid; gap:16px;
-      grid-template-columns: 520px 1fr;
-    }
-    @media (max-width: 980px){ .wrap{grid-template-columns: 1fr;} }
 
-    .card{
-      background:rgba(22,26,34,.92);
-      border:1px solid var(--border);
-      border-radius:14px; overflow:hidden;
-      box-shadow: 0 18px 50px rgba(0,0,0,.35);
-    }
-    .head{
-      padding:14px 16px; border-bottom:1px solid var(--border);
-      display:flex; align-items:baseline; justify-content:space-between; gap:12px;
-    }
-    .title{font-weight:800; letter-spacing:.2px}
-    .sub{color:var(--muted); font-size:.9rem}
-    .body{padding:14px 16px}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    #board{ width: 100%; max-width: 520px; margin: 0 auto; }
-
-    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
-    .pill{
-      border:1px solid var(--border); padding:6px 10px; border-radius:999px;
-      color:var(--muted); font-size:.9rem;
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      /* Subtle animated grain texture */
+      position: relative;
     }
-    .pill strong{color:var(--text)}
-    .pill.good strong{color:var(--good)}
-    .pill.bad strong{color:var(--bad)}
 
-    button{
-      background:#101521; color:var(--text);
-      border:1px solid var(--border); border-radius:10px;
-      padding:10px 12px; cursor:pointer; font-weight:700;
-      transition: transform .06s ease, background .2s ease;
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(245,166,35,0.03) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(52,211,153,0.02) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 90%, rgba(99,102,241,0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
     }
-    button:hover{background:#121a2a}
-    button:active{transform:translateY(1px)}
-    button.primary{border-color:rgba(245,158,11,.6)}
-    button.danger{border-color:rgba(239,68,68,.6)}
-    button:disabled{opacity:.55; cursor:not-allowed}
 
-    .offers{display:grid; gap:10px; margin-top:12px}
-    .offer{
-      border:1px solid var(--border); border-radius:12px; padding:12px;
-      display:flex; justify-content:space-between; gap:10px; align-items:center;
-      background:rgba(16,21,33,.55);
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: min(1140px, 100%);
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 480px 1fr;
     }
-    .offer .left{display:flex; flex-direction:column; gap:2px}
-    .offer .move{font-weight:900; letter-spacing:.2px}
-    .offer .meta{color:var(--muted); font-size:.9rem}
-    .offer .cost{font-weight:900; color:var(--accent)}
-    .offer button{padding:9px 10px; border-radius:10px}
+    @media (max-width: 1000px) {
+      .wrap { grid-template-columns: 1fr; max-width: 520px; }
+    }
 
-    .log{
-      margin-top:12px;
-      background:rgba(0,0,0,.25);
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:10px;
-      color:#c7cfdb;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size:.85rem;
-      white-space:pre-wrap;
-      max-height:240px;
-      overflow:auto;
+    /* ── Cards ── */
+    .card {
+      background: var(--panel-glass);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      backdrop-filter: blur(12px);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.03) inset,
+        0 24px 60px rgba(0,0,0,0.4);
+    }
+
+    .head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .title {
+      font-weight: 900;
+      font-size: 1.15rem;
+      letter-spacing: -0.3px;
+    }
+    .title .icon { margin-right: 6px; }
+    .sub {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+      max-width: 340px;
+    }
+    .body { padding: 16px 20px; }
+
+    /* ── Board ── */
+    #board {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── Status row ── */
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .pill {
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      background: rgba(0,0,0,0.2);
+      white-space: nowrap;
+    }
+    .pill strong {
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+    }
+    .pill.good { border-color: rgba(52,211,153,0.2); background: var(--good-dim); }
+    .pill.good strong { color: var(--good); }
+    .pill.bad { border-color: rgba(248,113,113,0.2); background: var(--bad-dim); }
+    .pill.bad strong { color: var(--bad); }
+
+    /* ── Bankroll bar ── */
+    .bankroll-bar {
+      margin-top: 12px;
+      height: 6px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 99px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .bankroll-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--good), var(--accent));
+      border-radius: 99px;
+      transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* ── Buttons ── */
+    button {
+      font-family: 'Outfit', sans-serif;
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.2px;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: #3a4a5f;
+    }
+    button:active { transform: translateY(1px); }
+    button.primary {
+      border-color: rgba(245,166,35,0.4);
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    button.primary:hover {
+      background: rgba(245,166,35,0.18);
+    }
+    button.danger {
+      border-color: rgba(248,113,113,0.3);
+      color: var(--bad);
+    }
+    button.danger:hover {
+      background: var(--bad-dim);
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* ── Offers ── */
+    .offers { display: grid; gap: 8px; margin-top: 14px; }
+    .offer {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      background: rgba(0,0,0,0.15);
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .offer:hover {
+      border-color: var(--border-light);
+      background: rgba(0,0,0,0.25);
+    }
+    .offer .left { display: flex; flex-direction: column; gap: 3px; }
+    .offer .move {
+      font-weight: 900;
+      font-size: 1rem;
+      letter-spacing: -0.2px;
+    }
+    .offer .meta {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+    .offer .right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .offer .cost {
+      font-weight: 800;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.92rem;
+    }
+
+    /* Rank badges for offers */
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      font-weight: 900;
+      font-size: 0.75rem;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .rank-1 { background: rgba(245,166,35,0.15); color: var(--accent); border: 1px solid rgba(245,166,35,0.3); }
+    .rank-2 { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+    .rank-3 { background: rgba(100,116,139,0.08); color: #64748b; border: 1px solid rgba(100,116,139,0.15); }
+
+    /* ── Log ── */
+    .log {
+      margin-top: 14px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      color: #8899aa;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .log::-webkit-scrollbar { width: 4px; }
+    .log::-webkit-scrollbar-track { background: transparent; }
+    .log::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 99px; }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border-light);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Move number counter ── */
+    .move-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 8px;
     }
   </style>
 </head>
 <body>
   <div class="wrap">
 
+    <!-- Left: Board -->
     <div class="card">
       <div class="head">
         <div>
-          <div class="title">♟️ BetChess</div>
-          <div class="sub">Pick from 3 Stockfish offers. Best costs more. Bankrupt = lose. Mate = win.</div>
+          <div class="title"><span class="icon">♟</span>BetChess</div>
+          <div class="sub">Pick from 3 Stockfish offers each turn. Best costs more. Go bankrupt = lose. Deliver mate = win.</div>
         </div>
       </div>
       <div class="body">
         <div id="board"></div>
+        <div class="move-counter" id="moveCounter"></div>
       </div>
     </div>
 
+    <!-- Right: Controls -->
     <div class="card">
       <div class="head">
         <div>
           <div class="title">Control Panel</div>
-          <div class="sub">You play White. Stockfish plays Black.</div>
+          <div class="sub">You play White · Stockfish plays Black</div>
         </div>
       </div>
       <div class="body">
+
+        <!-- Status pills -->
         <div class="row">
           <div class="pill"><span>Turn:</span> <strong id="turn">—</strong></div>
-          <div class="pill good"><span>Bankroll:</span> <strong id="bank">$—</strong></div>
+          <div class="pill good"><span>Bank:</span> <strong id="bank">$—</strong></div>
           <div class="pill"><span>Status:</span> <strong id="status">Loading…</strong></div>
         </div>
 
-        <div class="row" style="margin-top:12px">
+        <!-- Bankroll bar -->
+        <div class="bankroll-bar">
+          <div class="bankroll-fill" id="bankFill" style="width:100%"></div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="row" style="margin-top:14px">
           <button class="primary" id="newGame">New Game</button>
-          <button id="refreshOffers">Refresh Offers</button>
+          <button id="refreshOffers">Re-roll Offers</button>
           <button class="danger" id="resign">Resign</button>
         </div>
 
+        <!-- 3 Offers rendered here -->
         <div class="offers" id="offers"></div>
 
+        <!-- Event log -->
         <div class="log" id="log"></div>
       </div>
     </div>
 
   </div>
 
-  <!-- deps -->
+  <!-- ═══════════ Dependencies ═══════════ -->
   <script src="https://unpkg.com/jquery@3.5.1/dist/jquery.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
   <script>
-  (function(){
+  (function () {
     'use strict';
 
-    // ======= CDN bases =======
-    const STOCKFISH_BASE = 'https://cdn.jsdelivr.net/npm/stockfish.wasm@0.10.0/';
-    const PIECE_THEME = 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/img/chesspieces/wikipedia/{piece}.png';
+    // ═══════════════════════════════════════════════════════════════
+    //  CONFIG
+    // ═══════════════════════════════════════════════════════════════
+    //
+    //  KEY FIX: Use the pure-JS (asm.js) stockfish build from
+    //  stockfish.js@10.0.2 on jsdelivr. The WASM build fails in
+    //  blob-origin workers because the .wasm binary fetch gets
+    //  blocked by same-origin policy (blob: ≠ cdn origin).
+    //
+    //  The asm.js version is a single JS file — no sidecar binary —
+    //  so importScripts() inside a blob worker "just works".
+    // ═══════════════════════════════════════════════════════════════
 
-    // ======= UI =======
-    const elTurn = document.getElementById('turn');
-    const elBank = document.getElementById('bank');
-    const elStatus = document.getElementById('status');
-    const elOffers = document.getElementById('offers');
-    const elLog = document.getElementById('log');
+    const STOCKFISH_JS_URL =
+      'https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js';
 
-    function log(s){
+    const PIECE_THEME =
+      'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/img/chesspieces/wikipedia/{piece}.png';
+
+    const STARTING_BANKROLL = 25;
+    const DEPTH_OFFERS      = 12;   // MultiPV analysis depth for the 3 offers
+    const DEPTH_ENGINE       = 12;   // Engine's own-move search depth
+
+    // ═══════════════════════════════════════════════════════════════
+    //  UI REFERENCES
+    // ═══════════════════════════════════════════════════════════════
+
+    const elTurn    = document.getElementById('turn');
+    const elBank    = document.getElementById('bank');
+    const elStatus  = document.getElementById('status');
+    const elOffers  = document.getElementById('offers');
+    const elLog     = document.getElementById('log');
+    const elBankFill = document.getElementById('bankFill');
+    const elMoveCtr = document.getElementById('moveCounter');
+
+    function log(s) {
       elLog.textContent = (elLog.textContent ? elLog.textContent + '\n' : '') + s;
       elLog.scrollTop = elLog.scrollHeight;
     }
-    function setStatus(s){ elStatus.textContent = s; }
-    function money(n){ return '$' + Math.max(0, n).toLocaleString(undefined,{maximumFractionDigits:0}); }
+    function setStatus(s) { elStatus.textContent = s; }
+    function money(n) { return '$' + Math.max(0, n).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
 
-    // ======= Game state =======
-    let game = new Chess();
-    let board = null;
+    // ═══════════════════════════════════════════════════════════════
+    //  GAME STATE
+    // ═══════════════════════════════════════════════════════════════
 
-    let bankroll = 25;          // tweak this for difficulty
-    const DEPTH_OFFERS = 12;    // analysis depth for 3 offers
-    const DEPTH_ENGINE = 12;    // engine move depth
+    let game     = new Chess();
+    let board    = null;
+    let bankroll = STARTING_BANKROLL;
+    let moveNum  = 0;    // counts white moves played
+    let locked   = false; // prevents double-clicks during async ops
 
-    // ======= Stockfish engine wrapper =======
+    // ═══════════════════════════════════════════════════════════════
+    //  STOCKFISH ENGINE WRAPPER (UCI over Web Worker)
+    //
+    //  Creates a blob worker that importScripts the asm.js build.
+    //  All analysis calls are serialized through a queue so
+    //  MultiPV output from concurrent calls never interleaves.
+    // ═══════════════════════════════════════════════════════════════
+
     class UCIEngine {
-      constructor(){
-        this.worker = null;
+      constructor() {
+        this.worker     = null;
         this._listeners = [];
-        this._queue = Promise.resolve();
+        this._queue     = Promise.resolve();
       }
-      async init(){
-        this.worker = createStockfishWorkerBlob();
+
+      async init() {
+        // Build a blob worker that pulls in stockfish.js via importScripts.
+        // blob: origin counts as same-origin, sidestepping CORS issues.
+        const code = `importScripts(${JSON.stringify(STOCKFISH_JS_URL)});`;
+        const blob = new Blob([code], { type: 'application/javascript' });
+        const url  = URL.createObjectURL(blob);
+        this.worker = new Worker(url);
+
+        // Fan out every message from the worker to all active listeners.
         this.worker.onmessage = (e) => {
           const line = String(e.data || '').trim();
-          if(!line) return;
+          if (!line) return;
           this._listeners.forEach(fn => fn(line));
         };
 
-        await this._waitFor('uciok', () => this.send('uci'), 8000);
-        await this._waitFor('readyok', () => this.send('isready'), 8000);
+        this.worker.onerror = (err) => {
+          log('WORKER ERROR: ' + (err.message || err));
+        };
+
+        // UCI handshake
+        await this._waitFor('uciok',   () => this.send('uci'),     10000);
+        await this._waitFor('readyok', () => this.send('isready'),  10000);
         this.send('ucinewgame');
-        await this._waitFor('readyok', () => this.send('isready'), 8000);
+        await this._waitFor('readyok', () => this.send('isready'),  10000);
       }
-      send(cmd){
+
+      send(cmd) {
         this.worker.postMessage(cmd);
       }
-      _waitFor(token, kick, timeoutMs){
+
+      // Wait for a specific token from engine output, with timeout.
+      _waitFor(token, kickFn, timeoutMs) {
         return new Promise((resolve, reject) => {
           let done = false;
-          const t = setTimeout(() => {
-            if(done) return;
+          const timer = setTimeout(() => {
+            if (done) return;
             done = true;
             this._listeners = this._listeners.filter(x => x !== onLine);
             reject(new Error('Timeout waiting for: ' + token));
           }, timeoutMs);
 
           const onLine = (line) => {
-            if(line === token || line.includes(token)){
-              if(done) return;
+            if (line === token || line.includes(token)) {
+              if (done) return;
               done = true;
-              clearTimeout(t);
+              clearTimeout(timer);
               this._listeners = this._listeners.filter(x => x !== onLine);
               resolve();
             }
           };
+
           this._listeners.push(onLine);
-          kick();
+          kickFn();
         });
       }
 
-      analyze(fen, multipv, depth){
-        // Serialize analysis calls to avoid interleaving output.
+      // Public: serialized analysis (returns promise of array of PV results).
+      analyze(fen, multipv, depth) {
         this._queue = this._queue.then(() => this._analyzeOnce(fen, multipv, depth));
         return this._queue;
       }
 
-      _analyzeOnce(fen, multipv, depth){
+      // Internal: single analysis run.
+      _analyzeOnce(fen, multipv, depth) {
         return new Promise((resolve, reject) => {
-          const linesByPv = new Map(); // pvIndex -> {uci, scoreText, cp, mate}
+          const linesByPv = new Map(); // pvIndex -> { uci, scoreText, cp, mate }
           let finished = false;
 
           const timeout = setTimeout(() => {
             cleanup();
             reject(new Error('Engine analysis timeout'));
-          }, 12000);
+          }, 15000);
 
           const onLine = (line) => {
-            // info ... multipv N score cp X ... pv e2e4 ...
-            if(line.startsWith('info ')){
+            // Parse "info" lines for score + principal variation
+            if (line.startsWith('info ')) {
               const mp = /(?:^|\s)multipv\s+(\d+)/.exec(line);
               const pv = /(?:^|\s)pv\s+([a-h][1-8][a-h][1-8][qrbn]?)/.exec(line);
-              if(!pv) return;
+              if (!pv) return;
 
-              const idx = mp ? parseInt(mp[1],10) : 1;
+              const idx = mp ? parseInt(mp[1], 10) : 1;
 
               let cp = null, mate = null, scoreText = '';
-              const mCp = /(?:^|\s)score\s+cp\s+(-?\d+)/.exec(line);
+              const mCp   = /(?:^|\s)score\s+cp\s+(-?\d+)/.exec(line);
               const mMate = /(?:^|\s)score\s+mate\s+(-?\d+)/.exec(line);
-              if(mMate){
-                mate = parseInt(mMate[1],10);
+              if (mMate) {
+                mate = parseInt(mMate[1], 10);
                 scoreText = (mate > 0 ? '#+' : '#') + mate;
-              } else if(mCp){
-                cp = parseInt(mCp[1],10);
-                scoreText = (cp >= 0 ? '+' : '') + (cp/100).toFixed(2);
+              } else if (mCp) {
+                cp = parseInt(mCp[1], 10);
+                scoreText = (cp >= 0 ? '+' : '') + (cp / 100).toFixed(2);
               }
 
               linesByPv.set(idx, { uci: pv[1], cp, mate, scoreText });
             }
 
-            if(line.startsWith('bestmove ')){
-              if(finished) return;
+            // "bestmove" signals analysis is complete.
+            if (line.startsWith('bestmove ')) {
+              if (finished) return;
               finished = true;
               cleanup();
-
-              // collect multipv results
               const out = [];
-              for(let i=1;i<=multipv;i++){
-                if(linesByPv.has(i)) out.push({pv:i, ...linesByPv.get(i)});
+              for (let i = 1; i <= multipv; i++) {
+                if (linesByPv.has(i)) out.push({ pv: i, ...linesByPv.get(i) });
               }
               resolve(out);
             }
@@ -269,13 +534,12 @@
           const cleanup = () => {
             clearTimeout(timeout);
             this._listeners = this._listeners.filter(x => x !== onLine);
-            // Stop the engine if still searching
-            try { this.send('stop'); } catch(_){}
+            try { this.send('stop'); } catch (_) {}
           };
 
           this._listeners.push(onLine);
 
-          // configure multipv and analyze
+          // Configure MultiPV and start search
           this.send('setoption name MultiPV value ' + multipv);
           this.send('position fen ' + fen);
           this.send('go depth ' + depth);
@@ -283,141 +547,173 @@
       }
     }
 
-    function createStockfishWorkerBlob(){
-      // Worker() URL must be same-origin; blob: counts as same-origin, then importScripts() pulls Stockfish. :contentReference[oaicite:3]{index=3}
-      const code = `
-        self.Module = self.Module || {};
-        self.Module.locateFile = function(path) { return ${JSON.stringify(STOCKFISH_BASE)} + path; };
-        importScripts(${JSON.stringify(STOCKFISH_BASE + 'stockfish.js')});
-      `;
-      const blob = new Blob([code], {type:'application/javascript'});
-      const url = URL.createObjectURL(blob);
-      return new Worker(url);
-    }
-
     const engine = new UCIEngine();
 
-    // ======= Move helpers =======
-    function uciToMoveObj(uci){
-      const from = uci.slice(0,2);
-      const to = uci.slice(2,4);
-      const promotion = (uci.length > 4) ? uci[4] : undefined;
-      return promotion ? {from,to,promotion} : {from,to};
+    // ═══════════════════════════════════════════════════════════════
+    //  MOVE HELPERS
+    // ═══════════════════════════════════════════════════════════════
+
+    // Convert UCI string (e.g. "e2e4") to chess.js move object.
+    function uciToMoveObj(uci) {
+      const from = uci.slice(0, 2);
+      const to   = uci.slice(2, 4);
+      const promo = uci.length > 4 ? uci[4] : undefined;
+      return promo ? { from, to, promotion: promo } : { from, to };
     }
 
-    function uciToSAN(uci){
+    // Convert UCI string to SAN notation using current position.
+    function uciToSAN(uci) {
       const tmp = new Chess(game.fen());
       const m = tmp.move(uciToMoveObj(uci));
       return m ? m.san : uci;
     }
 
-    function isGameOver(){
-      if(game.in_checkmate()) return {over:true, msg: (game.turn()==='w' ? 'Black' : 'White') + ' delivered checkmate.'};
-      if(game.in_stalemate()) return {over:true, msg:'Stalemate.'};
-      if(game.in_threefold_repetition()) return {over:true, msg:'Threefold repetition.'};
-      if(game.insufficient_material()) return {over:true, msg:'Insufficient material.'};
-      if(game.in_draw()) return {over:true, msg:'Draw.'};
-      return {over:false, msg:''};
+    // Check all game-over conditions.
+    function isGameOver() {
+      if (game.in_checkmate())
+        return { over: true, msg: (game.turn() === 'w' ? 'Black' : 'White') + ' wins by checkmate!' };
+      if (game.in_stalemate())
+        return { over: true, msg: 'Stalemate — draw.' };
+      if (game.in_threefold_repetition())
+        return { over: true, msg: 'Threefold repetition — draw.' };
+      if (game.insufficient_material())
+        return { over: true, msg: 'Insufficient material — draw.' };
+      if (game.in_draw())
+        return { over: true, msg: 'Draw.' };
+      return { over: false, msg: '' };
     }
 
-    function syncUI(){
-      elTurn.textContent = (game.turn() === 'w') ? 'White (you)' : 'Black (Stockfish)';
+    // ═══════════════════════════════════════════════════════════════
+    //  UI SYNC
+    // ═══════════════════════════════════════════════════════════════
+
+    function syncUI() {
+      elTurn.textContent = (game.turn() === 'w') ? 'White (you)' : 'Black (SF)';
       elBank.textContent = money(bankroll);
 
+      // Bankroll bar (percentage of starting bankroll)
+      const pct = Math.max(0, Math.min(100, (bankroll / STARTING_BANKROLL) * 100));
+      elBankFill.style.width = pct + '%';
+
+      // Color the bank pill based on health
+      const bankPill = elBank.closest('.pill');
+      if (bankPill) {
+        bankPill.className = 'pill ' + (bankroll > 8 ? 'good' : bankroll > 3 ? '' : 'bad');
+      }
+
+      // Move counter
+      elMoveCtr.textContent = moveNum > 0 ? `Move ${moveNum} · ${game.fen().split(' ').pop()} full moves` : '';
+
       const over = isGameOver();
-      if(over.over){
-        setStatus(over.msg);
-        return;
-      }
-
-      if(bankroll <= 0){
-        setStatus('Bankrupt. You lose.');
-        return;
-      }
-
-      setStatus((game.turn() === 'w') ? 'Choose a move offer.' : 'Stockfish thinking…');
+      if (over.over) { setStatus(over.msg); return; }
+      if (bankroll <= 0) { setStatus('💀 Bankrupt — you lose!'); return; }
+      setStatus(game.turn() === 'w' ? 'Choose a move offer ↓' : 'Stockfish thinking…');
     }
 
-    function syncBoard(){
+    function syncBoard() {
       board.position(game.fen(), true);
       syncUI();
     }
 
-    // ======= Offers logic =======
-    async function buildOffersForWhite(){
-      if(game.turn() !== 'w') return;
-      if(bankroll <= 0) return;
+    // ═══════════════════════════════════════════════════════════════
+    //  OFFER SYSTEM
+    //
+    //  Each turn, Stockfish analyzes MultiPV=3 at DEPTH_OFFERS.
+    //  The 3 candidate moves are priced:
+    //    Rank 1 (best)  → $3
+    //    Rank 2 (good)  → $2
+    //    Rank 3 (okay)  → $1
+    //
+    //  If fewer than 3 PVs come back (e.g. only 2 legal moves),
+    //  we pad with remaining legal moves at $1.
+    // ═══════════════════════════════════════════════════════════════
+
+    async function buildOffersForWhite() {
+      if (game.turn() !== 'w' || bankroll <= 0) return;
 
       elOffers.innerHTML = '';
       setStatus('Analyzing 3 offers…');
-      log('Analyzing (MultiPV=3)…');
+      log(`── Move ${moveNum + 1}: analyzing (MultiPV=3, depth=${DEPTH_OFFERS})…`);
 
       let offers;
-      try{
+      try {
         offers = await engine.analyze(game.fen(), 3, DEPTH_OFFERS);
-      }catch(err){
-        setStatus('Engine error (see log).');
+      } catch (err) {
+        setStatus('Engine error — see log.');
         log('ENGINE ERROR: ' + (err && err.message ? err.message : String(err)));
         return;
       }
 
-      // Ensure we got at least 3; if fewer, pad with legal moves
-      const legals = game.moves({verbose:true}).map(m => (m.from + m.to + (m.promotion||'')));
-      const seen = new Set(offers.map(o=>o.uci));
-      for(const u of legals){
-        if(offers.length >= 3) break;
-        if(!seen.has(u)){
-          offers.push({pv: offers.length+1, uci:u, cp:null, mate:null, scoreText:''});
+      // Pad to 3 if engine returned fewer (happens when ≤2 legal moves)
+      const legals = game.moves({ verbose: true }).map(m => m.from + m.to + (m.promotion || ''));
+      const seen = new Set(offers.map(o => o.uci));
+      for (const u of legals) {
+        if (offers.length >= 3) break;
+        if (!seen.has(u)) {
+          offers.push({ pv: offers.length + 1, uci: u, cp: null, mate: null, scoreText: '?' });
           seen.add(u);
         }
       }
-      offers = offers.slice(0,3);
+      offers = offers.slice(0, 3);
 
-      // Cost model: best move costs 3, 2nd costs 2, 3rd costs 1 (simple + fun)
-      const priced = offers.map((o, idx) => {
-        const cost = 3 - idx;
-        return {...o, cost, san: uciToSAN(o.uci)};
-      });
+      // Attach cost and SAN to each offer
+      const priced = offers.map((o, idx) => ({
+        ...o,
+        cost: 3 - idx,                    // best=$3, mid=$2, budget=$1
+        san: uciToSAN(o.uci),
+      }));
 
       renderOffers(priced);
-      setStatus('Pick one (best costs more).');
-      log('Offers ready.');
-      syncUI();
+      setStatus('Pick one (best costs more) ↓');
+      log('3 offers ready.');
     }
 
-    function renderOffers(offers){
+    function renderOffers(offers) {
       elOffers.innerHTML = '';
       offers.forEach((o, idx) => {
         const canAfford = bankroll >= o.cost;
         const row = document.createElement('div');
         row.className = 'offer';
 
+        // Left side: rank badge + move + eval
         const left = document.createElement('div');
         left.className = 'left';
+        left.style.display = 'flex';
+        left.style.flexDirection = 'row';
+        left.style.alignItems = 'center';
+        left.style.gap = '10px';
 
-        const move = document.createElement('div');
-        move.className = 'move';
-        move.textContent = `${idx+1}) ${o.san}`;
+        const badge = document.createElement('span');
+        badge.className = 'rank-badge rank-' + (idx + 1);
+        badge.textContent = idx + 1;
 
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-        meta.textContent = `Eval: ${o.scoreText || '—'}   ·   UCI: ${o.uci}`;
+        const info = document.createElement('div');
+        const moveLine = document.createElement('div');
+        moveLine.className = 'move';
+        moveLine.textContent = o.san;
+        const metaLine = document.createElement('div');
+        metaLine.className = 'meta';
+        metaLine.textContent = `eval ${o.scoreText || '—'}`;
 
-        left.appendChild(move);
-        left.appendChild(meta);
+        info.appendChild(moveLine);
+        info.appendChild(metaLine);
+        left.appendChild(badge);
+        left.appendChild(info);
 
+        // Right side: cost + play button
         const right = document.createElement('div');
-        right.style.display = 'flex';
-        right.style.gap = '10px';
-        right.style.alignItems = 'center';
+        right.className = 'right';
 
         const cost = document.createElement('div');
         cost.className = 'cost';
-        cost.textContent = `Cost: $${o.cost}`;
+        cost.textContent = `$${o.cost}`;
 
         const btn = document.createElement('button');
-        btn.textContent = canAfford ? 'Play' : 'Too $';
+        btn.textContent = canAfford ? 'Play' : 'Broke';
         btn.disabled = !canAfford;
+        if (canAfford) {
+          btn.className = 'primary';
+        }
         btn.onclick = () => playWhiteOffer(o);
 
         right.appendChild(cost);
@@ -429,131 +725,160 @@
       });
     }
 
-    async function playWhiteOffer(offer){
-      if(game.turn() !== 'w') return;
-      if(bankroll < offer.cost) return;
+    // ═══════════════════════════════════════════════════════════════
+    //  PLAY MOVES
+    // ═══════════════════════════════════════════════════════════════
+
+    async function playWhiteOffer(offer) {
+      if (locked || game.turn() !== 'w' || bankroll < offer.cost) return;
+      locked = true;
 
       bankroll -= offer.cost;
-      log(`WHITE plays ${offer.san} (paid $${offer.cost})`);
+      moveNum++;
+      log(`WHITE ${moveNum}. ${offer.san}  (−$${offer.cost}, bank=${money(bankroll)})`);
 
       const m = game.move(uciToMoveObj(offer.uci));
-      if(!m){
-        log('Illegal move somehow (offer): ' + offer.uci);
-        setStatus('Illegal offer move (see log).');
+      if (!m) {
+        log('!! Illegal move from offer: ' + offer.uci);
+        setStatus('Illegal offer move — see log.');
+        locked = false;
         return;
       }
+
       elOffers.innerHTML = '';
       syncBoard();
 
-      // Bankruptcy check
-      if(bankroll <= 0){
-        setStatus('Bankrupt. You lose.');
+      // Check end conditions after white's move
+      if (bankroll <= 0) {
+        setStatus('💀 Bankrupt — you lose!');
+        log('BANKRUPT.');
+        locked = false;
         return;
       }
-
       const over = isGameOver();
-      if(over.over){
+      if (over.over) {
         setStatus(over.msg);
+        log('GAME OVER: ' + over.msg);
+        locked = false;
         return;
       }
 
+      // Black responds
       await playBlackBestMove();
+      locked = false;
     }
 
-    async function playBlackBestMove(){
-      if(game.turn() !== 'b') return;
+    async function playBlackBestMove() {
+      if (game.turn() !== 'b') return;
 
       setStatus('Stockfish thinking…');
-      log('BLACK analyzing best move…');
+      log('BLACK thinking…');
 
       let lines;
-      try{
+      try {
         lines = await engine.analyze(game.fen(), 1, DEPTH_ENGINE);
-      }catch(err){
-        setStatus('Engine error on black move (see log).');
+      } catch (err) {
+        setStatus('Engine error on black move — see log.');
         log('ENGINE ERROR: ' + (err && err.message ? err.message : String(err)));
         return;
       }
 
       const best = lines && lines[0] ? lines[0].uci : null;
-      if(!best){
-        setStatus('No best move received.');
-        log('No best move received.');
+      if (!best) {
+        setStatus('No engine move received.');
+        log('!! No best move received from engine.');
         return;
       }
 
-      const san = (function(){
+      // Convert to SAN before applying
+      const san = (() => {
         const tmp = new Chess(game.fen());
         const m = tmp.move(uciToMoveObj(best));
         return m ? m.san : best;
       })();
 
-      log(`BLACK plays ${san}`);
       const m = game.move(uciToMoveObj(best));
-      if(!m){
-        setStatus('Illegal black move (see log).');
-        log('Illegal black move: ' + best);
+      if (!m) {
+        setStatus('Illegal black move — see log.');
+        log('!! Illegal black move: ' + best);
         return;
       }
 
+      log(`BLACK    ${san}`);
       syncBoard();
 
       const over = isGameOver();
-      if(over.over){
+      if (over.over) {
         setStatus(over.msg);
+        log('GAME OVER: ' + over.msg);
         return;
       }
 
-      // New offers for white
+      // Generate next set of offers for white
       await buildOffersForWhite();
     }
 
-    // ======= Buttons =======
+    // ═══════════════════════════════════════════════════════════════
+    //  BUTTON HANDLERS
+    // ═══════════════════════════════════════════════════════════════
+
     document.getElementById('newGame').onclick = async () => {
+      if (locked) return;
+      locked = true;
       game.reset();
-      bankroll = 25;
+      bankroll = STARTING_BANKROLL;
+      moveNum = 0;
       elOffers.innerHTML = '';
       elLog.textContent = '';
-      log('New game.');
+      log('═══ New game ═══');
       syncBoard();
       await buildOffersForWhite();
+      locked = false;
     };
 
     document.getElementById('refreshOffers').onclick = async () => {
-      if(game.turn() !== 'w') return;
+      if (locked || game.turn() !== 'w') return;
+      locked = true;
+      log('Re-rolling offers…');
       await buildOffersForWhite();
+      locked = false;
     };
 
     document.getElementById('resign').onclick = () => {
-      setStatus('You resigned. (Refresh for a new game.)');
+      if (locked) return;
+      setStatus('You resigned.');
       elOffers.innerHTML = '';
-      log('Resign.');
+      log('RESIGNED.');
     };
 
-    // ======= INIT =======
-    async function init(){
-      // build board
+    // ═══════════════════════════════════════════════════════════════
+    //  INIT — Load board, then Stockfish, then build first offers
+    // ═══════════════════════════════════════════════════════════════
+
+    async function init() {
       board = Chessboard('board', {
         position: 'start',
         orientation: 'white',
         draggable: false,
-        pieceTheme: PIECE_THEME, // fixes your wP.png / bK.png missing errors :contentReference[oaicite:4]{index=4}
+        pieceTheme: PIECE_THEME,
       });
 
       syncUI();
-      log('Loading Stockfish…');
+      log('Loading Stockfish (asm.js)…');
+      setStatus('Loading engine…');
 
-      try{
+      try {
         await engine.init();
-      }catch(err){
-        setStatus('Stockfish failed to init (see log).');
+      } catch (err) {
+        setStatus('Stockfish failed to load — see log.');
         log('ENGINE INIT ERROR: ' + (err && err.message ? err.message : String(err)));
-        log('Tip: serve this via http://localhost (python -m http.server) instead of file://');
+        log('If running locally, serve via HTTP (python3 -m http.server), not file://');
         return;
       }
 
-      setStatus('Ready.');
-      log('Stockfish ready.');
+      setStatus('Ready!');
+      log('Stockfish ready. Let\'s play.');
+      log('═══ Game start ═══');
       await buildOffersForWhite();
     }
 
