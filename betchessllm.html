@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BetChess — Strategic Resource Chess</title>
+
+<!-- chessboard.js CSS -->
+<link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+
+<!-- Distinctive typography -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;600;800;900&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════
+   DESIGN: Industrial chess terminal — warm amber on
+   charcoal with utilitarian type. Feels like a betting
+   terminal in a dim back-room chess club.
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #111210;
+  --bg-raised: #191b18;
+  --bg-sunken: #0c0d0b;
+  --panel: rgba(22, 24, 20, 0.95);
+  --amber: #e0a44c;
+  --amber-dim: rgba(224, 164, 76, 0.10);
+  --amber-mid: rgba(224, 164, 76, 0.25);
+  --green: #5ccc6f;
+  --green-dim: rgba(92, 204, 111, 0.12);
+  --red: #e05252;
+  --red-dim: rgba(224, 82, 82, 0.12);
+  --blue: #5b9bd5;
+  --blue-dim: rgba(91, 155, 213, 0.12);
+  --text: #ddd9d0;
+  --text-dim: #7a7668;
+  --border: #2c2e28;
+  --border-hi: #3e4138;
+  --highlight-1: rgba(224, 164, 76, 0.45);   /* best offer */
+  --highlight-2: rgba(160, 180, 170, 0.35);   /* mid offer */
+  --highlight-3: rgba(120, 130, 125, 0.25);   /* budget offer */
+  --highlight-free: rgba(92, 204, 111, 0.35); /* free move */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Bitter', Georgia, serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Ambient background texture ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 30%, rgba(224,164,76,0.03) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 70%, rgba(92,204,111,0.02) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ── Layout Shell ── */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(360px, 480px) 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+}
+
+/* ── Top Bar ── */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.logo {
+  font-weight: 900;
+  font-size: 1.3rem;
+  letter-spacing: -0.5px;
+  color: var(--amber);
+}
+.logo .sub {
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-left: 10px;
+  letter-spacing: 0;
+}
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── Status Pills ── */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  font-family: 'IBM Plex Mono', monospace;
+  white-space: nowrap;
+}
+.pill b { color: var(--text); font-weight: 700; }
+.pill.good { border-color: rgba(92,204,111,0.25); }
+.pill.good b { color: var(--green); }
+.pill.warn { border-color: rgba(224,164,76,0.25); }
+.pill.warn b { color: var(--amber); }
+.pill.bad { border-color: rgba(224,82,82,0.25); }
+.pill.bad b { color: var(--red); }
+
+/* ── Board Column ── */
+.board-col {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-right: 1px solid var(--border);
+}
+@media (max-width: 900px) { .board-col { border-right: none; border-bottom: 1px solid var(--border); } }
+
+#board-wrap {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+#board { width: 100%; }
+
+/* Square highlighting overlays (injected dynamically) */
+.square-highlight {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 3px;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+}
+
+/* Board info bar below the board */
+.board-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  padding: 0 2px;
+}
+.board-info .free-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--green-dim);
+  border: 1px solid rgba(92,204,111,0.3);
+  color: var(--green);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.board-info .free-tag:hover { background: rgba(92,204,111,0.2); }
+.board-info .free-tag.disabled {
+  opacity: 0.35; cursor: not-allowed;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+/* Bankroll bar */
+.bank-bar {
+  height: 5px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.bank-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bank-fill.low { background: linear-gradient(90deg, var(--red), var(--amber)); }
+
+/* ── Control Column ── */
+.ctrl-col {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
+}
+
+/* ── Buttons ── */
+button, .btn {
+  font-family: 'Bitter', Georgia, serif;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--bg-raised);
+  color: var(--text);
+  transition: all 0.12s ease;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+button:hover { background: var(--bg-sunken); border-color: var(--border-hi); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+button.primary { border-color: rgba(224,164,76,0.4); color: var(--amber); background: var(--amber-dim); }
+button.primary:hover { background: var(--amber-mid); }
+button.danger { border-color: rgba(224,82,82,0.3); color: var(--red); }
+button.danger:hover { background: var(--red-dim); }
+button.success { border-color: rgba(92,204,111,0.3); color: var(--green); }
+button.success:hover { background: var(--green-dim); }
+button.sm { padding: 5px 10px; font-size: 0.75rem; }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Offers ── */
+.offers { display: grid; gap: 8px; }
+.offer {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  cursor: default;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.offer:hover { border-color: var(--border-hi); }
+.offer.highlighted {
+  box-shadow: inset 0 0 0 1px var(--amber-mid);
+}
+.offer .rank {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  font-weight: 900;
+  font-size: 0.8rem;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.offer .rank.r1 { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(224,164,76,0.3); }
+.offer .rank.r2 { background: rgba(160,176,168,0.08); color: #a0b0aa; border: 1px solid rgba(160,176,168,0.2); }
+.offer .rank.r3 { background: rgba(120,130,125,0.06); color: #788280; border: 1px solid rgba(120,130,125,0.15); }
+
+.offer .move-info { display: flex; flex-direction: column; gap: 1px; }
+.offer .san {
+  font-weight: 900;
+  font-size: 1.05rem;
+  letter-spacing: -0.3px;
+}
+.offer .eval {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.offer .right { display: flex; align-items: center; gap: 10px; }
+.offer .cost {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 700;
+  color: var(--amber);
+  font-size: 0.9rem;
+}
+
+/* ── Log ── */
+.log-box {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  color: #8a9080;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.log-box::-webkit-scrollbar { width: 4px; }
+.log-box::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 99px; }
+
+/* ── Settings Panel (slide-out) ── */
+.settings-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.settings-overlay.open { opacity: 1; pointer-events: all; }
+
+.settings-drawer {
+  position: fixed;
+  top: 0; right: 0;
+  width: min(440px, 90vw);
+  height: 100vh;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  z-index: 501;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.settings-overlay.open + .settings-drawer,
+.settings-drawer.open { transform: translateX(0); }
+
+.settings-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.settings-header h2 {
+  font-size: 1.1rem;
+  color: var(--amber);
+}
+.settings-body { padding: 20px 22px; flex: 1; }
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: rgba(0,0,0,0.15);
+}
+legend {
+  color: var(--amber);
+  font-weight: 800;
+  font-size: 0.88rem;
+  padding: 0 6px;
+}
+.field { margin: 10px 0; }
+.field label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.85rem;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+.field .hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 3px;
+  font-style: italic;
+}
+
+/* ── Mode Toggle ── */
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+.mode-toggle .opt {
+  flex: 1;
+  padding: 8px 12px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  transition: all 0.15s;
+  border: none;
+  background: transparent;
+  font-family: 'Bitter', Georgia, serif;
+}
+.mode-toggle .opt:not(:last-child) { border-right: 1px solid var(--border); }
+.mode-toggle .opt.active {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+.mode-toggle .opt:hover:not(.active) { background: rgba(255,255,255,0.03); }
+
+/* ── Section headers ── */
+.section-head {
+  font-weight: 800;
+  font-size: 0.88rem;
+  color: var(--text);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Status label ── */
+.status-line {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 6px 0;
+}
+.status-line .spin {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid var(--border-hi);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 20px; left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--green);
+  color: #111;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 600;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--red); color: white; }
+
+/* ── Overrides for chessboard.js board squares for highlighting ── */
+/* We inject colored overlays via JS, but also style drag hints */
+.board-b72b1 .square-55d63.highlight-offer1 { box-shadow: inset 0 0 0 5px var(--highlight-1) !important; }
+.board-b72b1 .square-55d63.highlight-offer2 { box-shadow: inset 0 0 0 5px var(--highlight-2) !important; }
+.board-b72b1 .square-55d63.highlight-offer3 { box-shadow: inset 0 0 0 5px var(--highlight-3) !important; }
+.board-b72b1 .square-55d63.highlight-free { box-shadow: inset 0 0 0 5px var(--highlight-free) !important; }
+
+/* Override chessboard.js piece images when broken — we use Wikimedia SVGs */
+</style>
+</head>
+
+<body>
+
+<!-- ═══════ Toast ═══════ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════ Settings Overlay + Drawer ═══════ -->
+<div class="settings-overlay" id="settingsOverlay"></div>
+<div class="settings-drawer" id="settingsDrawer">
+  <div class="settings-header">
+    <h2>⚙ Settings</h2>
+    <button class="sm" id="closeSettings">✕ Close</button>
+  </div>
+  <div class="settings-body">
+
+    <!-- Game Settings -->
+    <fieldset>
+      <legend>Game Economy</legend>
+      <div class="field">
+        <label>Starting Bankroll ($)</label>
+        <input type="number" id="s_bankroll" value="25" min="5" max="9999" step="1">
+        <div class="hint">Total budget for the whole game.</div>
+      </div>
+      <div class="field">
+        <label>Cost: Best Move (Rank 1)</label>
+        <input type="number" id="s_cost1" value="3" min="0" max="99" step="1">
+      </div>
+      <div class="field">
+        <label>Cost: Good Move (Rank 2)</label>
+        <input type="number" id="s_cost2" value="2" min="0" max="99" step="1">
+      </div>
+      <div class="field">
+        <label>Cost: Budget Move (Rank 3)</label>
+        <input type="number" id="s_cost3" value="1" min="0" max="99" step="1">
+      </div>
+      <div class="field">
+        <label>Free Moves per Game</label>
+        <input type="number" id="s_freeMoves" value="1" min="0" max="20" step="1">
+        <div class="hint">Independent moves — drag any legal move at no cost.</div>
+      </div>
+    </fieldset>
+
+    <!-- Engine Settings -->
+    <fieldset>
+      <legend>Engine</legend>
+      <div class="field">
+        <label>Analysis Depth (offers)</label>
+        <input type="number" id="s_depthOffers" value="12" min="4" max="24" step="1">
+      </div>
+      <div class="field">
+        <label>Engine Depth (opponent)</label>
+        <input type="number" id="s_depthEngine" value="12" min="4" max="24" step="1">
+      </div>
+    </fieldset>
+
+    <!-- Opponent Mode -->
+    <fieldset>
+      <legend>Opponent</legend>
+      <div class="field">
+        <label>Play Against</label>
+        <div class="mode-toggle" id="modeToggle">
+          <button class="opt active" data-mode="stockfish">♟ Stockfish</button>
+          <button class="opt" data-mode="llm">🧠 LLM (Claude)</button>
+        </div>
+      </div>
+      <div id="llmSettings" style="display:none">
+        <div class="field">
+          <label>Anthropic API Key</label>
+          <input type="password" id="s_apiKey" placeholder="sk-ant-...">
+          <div class="hint">Stored in localStorage only. Never sent anywhere except api.anthropic.com.</div>
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <select id="s_model">
+            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>LLM Persona / System Prompt</label>
+          <textarea id="s_llmPrompt" rows="5" style="font-size:0.78rem">You are a strong chess player. Given a FEN position and move history, choose the single best move as Black. Respond with ONLY a UCI move string (e.g. "e7e5", "g8f6"). No explanation, no extra text — just the move.</textarea>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Future: Opponent Bid -->
+    <fieldset>
+      <legend>🔒 Coming Soon</legend>
+      <div class="field">
+        <label style="color:var(--text-dim)">Opponent Move Bidding</label>
+        <div class="hint">Bid $ to influence opponent's move selection. Higher bid = weaker opponent move. Not yet implemented.</div>
+      </div>
+    </fieldset>
+
+    <div class="btn-row" style="margin-top:12px">
+      <button class="primary" id="applySettings">Apply & New Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ Main Shell ═══════ -->
+<div class="shell">
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div>
+      <span class="logo">
+        ♟ BetChess
+        <span class="sub">resource-management chess</span>
+      </span>
+    </div>
+    <div class="topbar-actions">
+      <div class="pills">
+        <div class="pill"><span>Turn</span> <b id="ui_turn">—</b></div>
+        <div class="pill good" id="pillBank"><span>Bank</span> <b id="ui_bank">$—</b></div>
+        <div class="pill"><span>Move</span> <b id="ui_moveNum">0</b></div>
+      </div>
+      <button class="sm" id="btnSettings">⚙ Settings</button>
+    </div>
+  </div>
+
+  <!-- Board Column -->
+  <div class="board-col">
+    <div id="board-wrap">
+      <div id="board"></div>
+    </div>
+
+    <div class="bank-bar">
+      <div class="bank-fill" id="bankFill" style="width:100%"></div>
+    </div>
+
+    <div class="board-info">
+      <div class="status-line" id="ui_status">Loading engine…</div>
+      <div>
+        <span class="free-tag disabled" id="freeBtn" title="Use a free move (drag any legal piece)">
+          FREE ×<span id="ui_freeCount">0</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Move history (compact) -->
+    <div class="log-box" id="log" style="max-height:120px"></div>
+  </div>
+
+  <!-- Control Column -->
+  <div class="ctrl-col">
+    <div class="btn-row">
+      <button class="primary" id="btnNew">New Game</button>
+      <button id="btnReroll">Re-roll Offers</button>
+      <button class="danger" id="btnResign">Resign</button>
+    </div>
+
+    <div class="section-head" id="offersTitle">Offers</div>
+    <div class="offers" id="offers">
+      <div style="color:var(--text-dim); font-size:0.85rem; font-style:italic;">Loading engine…</div>
+    </div>
+
+    <!-- Opponent info -->
+    <div class="section-head" style="margin-top:8px">Opponent</div>
+    <div class="pill" id="ui_opponent" style="width:fit-content">♟ Stockfish depth 12</div>
+
+    <!-- Verbose log -->
+    <div class="section-head" style="margin-top:8px">Engine Log</div>
+    <div class="log-box" id="verboseLog" style="max-height:180px"></div>
+  </div>
+
+</div>
+
+<!-- ═══════ Dependencies ═══════ -->
+<script src="https://unpkg.com/jquery@3.5.1/dist/jquery.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+<script>
+(function () {
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  PIECE IMAGES — Wikimedia Commons SVGs
+//
+//  The chessboardjs NPM image path is unreliable on some
+//  CDNs. Wikimedia SVGs are permanent, hi-res, and free.
+// ═══════════════════════════════════════════════════════════
+
+const PIECE_URLS = {
+  wK: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+  wQ: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+  wR: 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+  wB: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+  wN: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+  wP: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+  bK: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+  bQ: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+  bR: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+  bB: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+  bN: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+  bP: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
+};
+
+// ═══════════════════════════════════════════════════════════
+//  STOCKFISH ENGINE (asm.js, blob-worker pattern)
+// ═══════════════════════════════════════════════════════════
+
+const STOCKFISH_URL = 'https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js';
+
+class UCIEngine {
+  constructor() {
+    this.worker = null;
+    this._listeners = [];
+    this._queue = Promise.resolve();
+  }
+
+  async init() {
+    const code = `importScripts(${JSON.stringify(STOCKFISH_URL)});`;
+    const blob = new Blob([code], { type: 'application/javascript' });
+    this.worker = new Worker(URL.createObjectURL(blob));
+
+    this.worker.onmessage = (e) => {
+      const line = String(e.data || '').trim();
+      if (!line) return;
+      this._listeners.forEach(fn => fn(line));
+    };
+    this.worker.onerror = (err) => vlog('WORKER ERR: ' + (err.message || err));
+
+    await this._wait('uciok',   () => this.send('uci'),    12000);
+    await this._wait('readyok', () => this.send('isready'), 12000);
+    this.send('ucinewgame');
+    await this._wait('readyok', () => this.send('isready'), 12000);
+  }
+
+  send(cmd) { this.worker.postMessage(cmd); }
+
+  _wait(token, kick, ms) {
+    return new Promise((res, rej) => {
+      let done = false;
+      const t = setTimeout(() => { if (!done) { done = true; rm(); rej(new Error('Timeout: ' + token)); } }, ms);
+      const fn = (line) => { if (!done && line.includes(token)) { done = true; clearTimeout(t); rm(); res(); } };
+      const rm = () => { this._listeners = this._listeners.filter(x => x !== fn); };
+      this._listeners.push(fn);
+      kick();
+    });
+  }
+
+  analyze(fen, multipv, depth) {
+    this._queue = this._queue.then(() => this._run(fen, multipv, depth));
+    return this._queue;
+  }
+
+  _run(fen, multipv, depth) {
+    return new Promise((res, rej) => {
+      const pvs = new Map();
+      let done = false;
+      const t = setTimeout(() => { cleanup(); rej(new Error('Analysis timeout')); }, 18000);
+
+      const fn = (line) => {
+        if (line.startsWith('info ')) {
+          const mp = /multipv\s+(\d+)/.exec(line);
+          const pv = /\bpv\s+([a-h][1-8][a-h][1-8][qrbn]?)/.exec(line);
+          if (!pv) return;
+          const idx = mp ? +mp[1] : 1;
+          let cp = null, mate = null, scoreText = '';
+          const mCp = /score\s+cp\s+(-?\d+)/.exec(line);
+          const mM  = /score\s+mate\s+(-?\d+)/.exec(line);
+          if (mM) { mate = +mM[1]; scoreText = (mate > 0 ? '#+' : '#') + mate; }
+          else if (mCp) { cp = +mCp[1]; scoreText = (cp >= 0 ? '+' : '') + (cp / 100).toFixed(2); }
+          pvs.set(idx, { uci: pv[1], cp, mate, scoreText });
+        }
+        if (line.startsWith('bestmove ')) {
+          if (done) return;
+          done = true; cleanup();
+          const out = [];
+          for (let i = 1; i <= multipv; i++) if (pvs.has(i)) out.push({ pv: i, ...pvs.get(i) });
+          res(out);
+        }
+      };
+      const cleanup = () => { clearTimeout(t); this._listeners = this._listeners.filter(x => x !== fn); try { this.send('stop'); } catch(_){} };
+      this._listeners.push(fn);
+      this.send('setoption name MultiPV value ' + multipv);
+      this.send('position fen ' + fen);
+      this.send('go depth ' + depth);
+    });
+  }
+}
+
+const sfEngine = new UCIEngine();
+
+// ═══════════════════════════════════════════════════════════
+//  LLM ENGINE (Claude API — modeled after Prymis)
+//
+//  Sends FEN + move history to Claude, expects a UCI move.
+// ═══════════════════════════════════════════════════════════
+
+class LLMEngine {
+  constructor() {}
+
+  async getMove(game, settings) {
+    const apiKey = settings.apiKey;
+    if (!apiKey) throw new Error('No API key configured (open Settings).');
+
+    const fen = game.fen();
+    const history = game.history({ verbose: true }).map(m => m.from + m.to + (m.promotion || '')).join(' ');
+    const legalMoves = game.moves({ verbose: true }).map(m => m.from + m.to + (m.promotion || ''));
+
+    const systemPrompt = settings.llmPrompt || 'You are a strong chess player. Respond with ONLY a UCI move.';
+
+    const userContent = [
+      `Current FEN: ${fen}`,
+      `Move history (UCI): ${history || '(none)'}`,
+      `Legal moves: ${legalMoves.join(', ')}`,
+      ``,
+      `You are playing Black. Choose your best move. Respond with ONLY the UCI move string.`
+    ].join('\n');
+
+    vlog(`LLM request: model=${settings.model}`);
+    vlog(`FEN: ${fen}`);
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: settings.model || 'claude-sonnet-4-20250514',
+        max_tokens: 20,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }]
+      })
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new Error(`API ${resp.status}: ${errText}`);
+    }
+
+    const data = await resp.json();
+    const text = (data.content || []).map(c => c.text || '').join('').trim();
+    vlog(`LLM response: "${text}"`);
+
+    // Extract UCI move (4-5 chars) from response
+    const match = text.match(/\b([a-h][1-8][a-h][1-8][qrbn]?)\b/);
+    if (!match) throw new Error(`Could not parse UCI move from LLM response: "${text}"`);
+
+    const uci = match[1];
+    // Validate it's legal
+    if (!legalMoves.includes(uci)) {
+      throw new Error(`LLM returned illegal move: "${uci}" (legal: ${legalMoves.join(', ')})`);
+    }
+
+    return uci;
+  }
+}
+
+const llmEngine = new LLMEngine();
+
+// ═══════════════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════════════
+
+const SETTINGS_KEY = 'betchess_settings_v2';
+
+function defaultSettings() {
+  return {
+    bankroll: 25,
+    cost1: 3, cost2: 2, cost3: 1,
+    freeMoves: 1,
+    depthOffers: 12,
+    depthEngine: 12,
+    mode: 'stockfish', // 'stockfish' | 'llm'
+    apiKey: '',
+    model: 'claude-sonnet-4-20250514',
+    llmPrompt: document.getElementById('s_llmPrompt')?.value || ''
+  };
+}
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+    return { ...defaultSettings(), ...s };
+  } catch (_) { return defaultSettings(); }
+}
+function saveSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function settingsToUI(s) {
+  document.getElementById('s_bankroll').value = s.bankroll;
+  document.getElementById('s_cost1').value = s.cost1;
+  document.getElementById('s_cost2').value = s.cost2;
+  document.getElementById('s_cost3').value = s.cost3;
+  document.getElementById('s_freeMoves').value = s.freeMoves;
+  document.getElementById('s_depthOffers').value = s.depthOffers;
+  document.getElementById('s_depthEngine').value = s.depthEngine;
+  document.getElementById('s_apiKey').value = s.apiKey || '';
+  document.getElementById('s_model').value = s.model || 'claude-sonnet-4-20250514';
+  document.getElementById('s_llmPrompt').value = s.llmPrompt || defaultSettings().llmPrompt;
+
+  // Mode toggle
+  document.querySelectorAll('#modeToggle .opt').forEach(o => {
+    o.classList.toggle('active', o.dataset.mode === s.mode);
+  });
+  document.getElementById('llmSettings').style.display = (s.mode === 'llm') ? 'block' : 'none';
+}
+
+function settingsFromUI() {
+  const mode = document.querySelector('#modeToggle .opt.active')?.dataset.mode || 'stockfish';
+  return {
+    bankroll: Math.max(1, +document.getElementById('s_bankroll').value || 25),
+    cost1: Math.max(0, +document.getElementById('s_cost1').value || 3),
+    cost2: Math.max(0, +document.getElementById('s_cost2').value || 2),
+    cost3: Math.max(0, +document.getElementById('s_cost3').value || 1),
+    freeMoves: Math.max(0, +document.getElementById('s_freeMoves').value || 0),
+    depthOffers: Math.max(4, +document.getElementById('s_depthOffers').value || 12),
+    depthEngine: Math.max(4, +document.getElementById('s_depthEngine').value || 12),
+    mode,
+    apiKey: document.getElementById('s_apiKey').value.trim(),
+    model: document.getElementById('s_model').value,
+    llmPrompt: document.getElementById('s_llmPrompt').value,
+  };
+}
+
+let CFG = loadSettings();
+
+// ═══════════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════════
+
+let game       = new Chess();
+let board      = null;
+let bankroll   = CFG.bankroll;
+let moveNum    = 0;
+let freeMovesLeft = CFG.freeMoves;
+let freeMode   = false;   // when true, board is draggable
+let locked     = false;
+let currentOffers = [];   // the 3 offer objects
+
+// ═══════════════════════════════════════════════════════════
+//  UI REFERENCES + HELPERS
+// ═══════════════════════════════════════════════════════════
+
+const $turn     = document.getElementById('ui_turn');
+const $bank     = document.getElementById('ui_bank');
+const $moveNum  = document.getElementById('ui_moveNum');
+const $status   = document.getElementById('ui_status');
+const $offers   = document.getElementById('offers');
+const $log      = document.getElementById('log');
+const $vlog     = document.getElementById('verboseLog');
+const $bankFill = document.getElementById('bankFill');
+const $freeBtn  = document.getElementById('freeBtn');
+const $freeCount= document.getElementById('ui_freeCount');
+const $opponent = document.getElementById('ui_opponent');
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.className = 'toast' + (ok ? '' : ' err');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function mlog(s) {
+  $log.textContent = ($log.textContent ? $log.textContent + '\n' : '') + s;
+  $log.scrollTop = $log.scrollHeight;
+}
+
+function vlog(s) {
+  $vlog.textContent = ($vlog.textContent ? $vlog.textContent + '\n' : '') + s;
+  $vlog.scrollTop = $vlog.scrollHeight;
+}
+
+function setStatus(html) { $status.innerHTML = html; }
+function money(n) { return '$' + Math.max(0, n).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+
+// ═══════════════════════════════════════════════════════════
+//  MOVE HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function uciToObj(uci) {
+  const from = uci.slice(0, 2), to = uci.slice(2, 4);
+  const promo = uci.length > 4 ? uci[4] : undefined;
+  return promo ? { from, to, promotion: promo } : { from, to };
+}
+
+function uciToSAN(uci) {
+  const tmp = new Chess(game.fen());
+  const m = tmp.move(uciToObj(uci));
+  return m ? m.san : uci;
+}
+
+function isGameOver() {
+  if (game.in_checkmate()) return (game.turn() === 'w' ? 'Black' : 'White') + ' wins by checkmate!';
+  if (game.in_stalemate()) return 'Stalemate — draw.';
+  if (game.in_threefold_repetition()) return 'Threefold repetition — draw.';
+  if (game.insufficient_material()) return 'Insufficient material — draw.';
+  if (game.in_draw()) return 'Draw.';
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BOARD SQUARE HIGHLIGHTING
+//
+//  Adds/removes CSS classes on chessboard squares for
+//  move visualization. Each offer gets a distinct color.
+// ═══════════════════════════════════════════════════════════
+
+function highlightSquares(fromSq, toSq, className) {
+  const fromEl = document.querySelector(`#board [data-square="${fromSq}"]`) ||
+                 document.querySelector(`#board .square-${fromSq}`);
+  const toEl   = document.querySelector(`#board [data-square="${toSq}"]`) ||
+                 document.querySelector(`#board .square-${toSq}`);
+
+  // chessboard.js uses class "square-XXXX" where XXXX is like "55d63"
+  // but the actual data attribute is set on the element. Let's use jQuery to find it.
+  $(`#board .square-${fromSq}`).addClass(className);
+  $(`#board .square-${toSq}`).addClass(className);
+}
+
+function clearAllHighlights() {
+  $('#board .square-55d63').removeClass('highlight-offer1 highlight-offer2 highlight-offer3 highlight-free');
+  // chessboard.js uses dynamic class names for squares, so clear all squares
+  $('#board [class*="square-"]').each(function () {
+    $(this).removeClass('highlight-offer1 highlight-offer2 highlight-offer3 highlight-free');
+  });
+}
+
+// Simpler approach: inject inline styles on the actual square divs
+function highlightMove(fromSq, toSq, color) {
+  const boardEl = document.getElementById('board');
+  if (!boardEl) return;
+  // chessboard.js: squares have data-square attribute on descendant elements
+  boardEl.querySelectorAll('[data-square]').forEach(el => {
+    const sq = el.getAttribute('data-square');
+    if (sq === fromSq || sq === toSq) {
+      el.style.boxShadow = `inset 0 0 0 5px ${color}`;
+    }
+  });
+}
+
+function clearHighlights() {
+  const boardEl = document.getElementById('board');
+  if (!boardEl) return;
+  boardEl.querySelectorAll('[data-square]').forEach(el => {
+    el.style.boxShadow = '';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI SYNC
+// ═══════════════════════════════════════════════════════════
+
+function syncUI() {
+  $turn.textContent = game.turn() === 'w' ? 'White' : 'Black';
+  $bank.textContent = money(bankroll);
+  $moveNum.textContent = moveNum;
+
+  // Bank bar
+  const pct = Math.max(0, Math.min(100, (bankroll / CFG.bankroll) * 100));
+  $bankFill.style.width = pct + '%';
+  $bankFill.className = 'bank-fill' + (pct < 25 ? ' low' : '');
+
+  // Bank pill color
+  const pillBank = document.getElementById('pillBank');
+  pillBank.className = 'pill ' + (bankroll > CFG.bankroll * 0.33 ? 'good' : bankroll > 0 ? 'warn' : 'bad');
+
+  // Free moves
+  $freeCount.textContent = freeMovesLeft;
+  $freeBtn.className = 'free-tag' + (freeMovesLeft <= 0 || game.turn() !== 'w' ? ' disabled' : '') + (freeMode ? ' active' : '');
+  if (freeMode) {
+    $freeBtn.style.background = 'rgba(92,204,111,0.25)';
+    $freeBtn.style.borderColor = 'rgba(92,204,111,0.6)';
+  } else {
+    $freeBtn.style.background = '';
+    $freeBtn.style.borderColor = '';
+  }
+
+  // Opponent label
+  if (CFG.mode === 'llm') {
+    $opponent.textContent = '🧠 LLM: ' + (CFG.model || 'Claude');
+  } else {
+    $opponent.textContent = '♟ Stockfish depth ' + CFG.depthEngine;
+  }
+
+  // Game over check
+  const over = isGameOver();
+  if (over) { setStatus(over); return; }
+  if (bankroll <= 0 && freeMovesLeft <= 0) { setStatus('💀 Bankrupt — you lose!'); return; }
+}
+
+function syncBoard() {
+  board.position(game.fen(), true);
+  syncUI();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  OFFERS — MultiPV analysis, priced by rank
+// ═══════════════════════════════════════════════════════════
+
+async function buildOffers() {
+  if (game.turn() !== 'w') return;
+  if (bankroll <= 0 && freeMovesLeft <= 0) return;
+
+  currentOffers = [];
+  $offers.innerHTML = '';
+  clearHighlights();
+  setStatus('<span class="spin"></span> Analyzing 3 offers…');
+  vlog(`── Move ${moveNum + 1}: MultiPV=3, depth=${CFG.depthOffers}…`);
+
+  let raw;
+  try {
+    raw = await sfEngine.analyze(game.fen(), 3, CFG.depthOffers);
+  } catch (err) {
+    setStatus('Engine error — see log.');
+    vlog('ERR: ' + (err.message || err));
+    return;
+  }
+
+  // Pad to 3 with remaining legal moves if needed
+  const legals = game.moves({ verbose: true }).map(m => m.from + m.to + (m.promotion || ''));
+  const seen = new Set(raw.map(o => o.uci));
+  for (const u of legals) {
+    if (raw.length >= 3) break;
+    if (!seen.has(u)) { raw.push({ pv: raw.length + 1, uci: u, cp: null, mate: null, scoreText: '?' }); seen.add(u); }
+  }
+
+  const costs = [CFG.cost1, CFG.cost2, CFG.cost3];
+  currentOffers = raw.slice(0, 3).map((o, i) => ({
+    ...o,
+    cost: costs[i] || 0,
+    san: uciToSAN(o.uci),
+    from: o.uci.slice(0, 2),
+    to: o.uci.slice(2, 4),
+  }));
+
+  renderOffers();
+  setStatus('Pick an offer ↓' + (freeMovesLeft > 0 ? ' or use a FREE move' : ''));
+  vlog('3 offers ready.');
+}
+
+function renderOffers() {
+  $offers.innerHTML = '';
+  const rankClasses = ['r1', 'r2', 'r3'];
+  const highlightColors = [
+    'rgba(224,164,76,0.45)',
+    'rgba(160,180,170,0.35)',
+    'rgba(120,130,125,0.28)'
+  ];
+
+  currentOffers.forEach((o, i) => {
+    const canAfford = bankroll >= o.cost;
+
+    const row = document.createElement('div');
+    row.className = 'offer';
+
+    // Hover → highlight move on board
+    row.addEventListener('mouseenter', () => {
+      clearHighlights();
+      highlightMove(o.from, o.to, highlightColors[i]);
+    });
+    row.addEventListener('mouseleave', () => {
+      clearHighlights();
+    });
+
+    // Rank badge
+    const rank = document.createElement('div');
+    rank.className = 'rank ' + rankClasses[i];
+    rank.textContent = i + 1;
+
+    // Move info
+    const info = document.createElement('div');
+    info.className = 'move-info';
+    const san = document.createElement('div');
+    san.className = 'san';
+    san.textContent = o.san;
+    const ev = document.createElement('div');
+    ev.className = 'eval';
+    ev.textContent = `eval ${o.scoreText || '—'}  ·  ${o.uci}`;
+    info.appendChild(san);
+    info.appendChild(ev);
+
+    // Right: cost + button
+    const right = document.createElement('div');
+    right.className = 'right';
+    const cost = document.createElement('div');
+    cost.className = 'cost';
+    cost.textContent = o.cost > 0 ? `$${o.cost}` : 'FREE';
+    const btn = document.createElement('button');
+    btn.className = canAfford || o.cost === 0 ? 'primary sm' : 'sm';
+    btn.textContent = canAfford || o.cost === 0 ? 'Play' : 'Broke';
+    btn.disabled = !(canAfford || o.cost === 0);
+    btn.onclick = () => playOffer(o);
+
+    right.appendChild(cost);
+    right.appendChild(btn);
+
+    row.appendChild(rank);
+    row.appendChild(info);
+    row.appendChild(right);
+    $offers.appendChild(row);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PLAY MOVES
+// ═══════════════════════════════════════════════════════════
+
+async function playOffer(offer) {
+  if (locked || game.turn() !== 'w') return;
+  if (bankroll < offer.cost && offer.cost > 0) return;
+  locked = true;
+  exitFreeMode();
+  clearHighlights();
+
+  bankroll -= offer.cost;
+  moveNum++;
+  mlog(`${moveNum}. ${offer.san}  (−$${offer.cost}, bank ${money(bankroll)})`);
+
+  const m = game.move(uciToObj(offer.uci));
+  if (!m) {
+    vlog('!! Illegal offer move: ' + offer.uci);
+    locked = false; return;
+  }
+
+  currentOffers = [];
+  $offers.innerHTML = '';
+  syncBoard();
+
+  if (bankroll <= 0 && freeMovesLeft <= 0) { setStatus('💀 Bankrupt — you lose!'); mlog('BANKRUPT.'); locked = false; return; }
+  const over = isGameOver();
+  if (over) { setStatus(over); mlog('GAME OVER: ' + over); locked = false; return; }
+
+  await playBlack();
+  locked = false;
+}
+
+// Free move: user drags a piece on the board
+async function playFreeMove(from, to, promotion) {
+  if (locked || game.turn() !== 'w' || freeMovesLeft <= 0) return 'snapback';
+  locked = true;
+
+  const moveObj = promotion ? { from, to, promotion } : { from, to };
+  const m = game.move(moveObj);
+  if (!m) { locked = false; return 'snapback'; }
+
+  freeMovesLeft--;
+  moveNum++;
+  mlog(`${moveNum}. ${m.san}  (FREE, bank ${money(bankroll)})`);
+  exitFreeMode();
+  clearHighlights();
+  currentOffers = [];
+  $offers.innerHTML = '';
+  syncBoard();
+
+  if (bankroll <= 0 && freeMovesLeft <= 0) { setStatus('💀 Bankrupt — you lose!'); locked = false; return; }
+  const over = isGameOver();
+  if (over) { setStatus(over); mlog('GAME OVER: ' + over); locked = false; return; }
+
+  await playBlack();
+  locked = false;
+}
+
+async function playBlack() {
+  if (game.turn() !== 'b') return;
+  setStatus('<span class="spin"></span> Opponent thinking…');
+
+  let bestUci;
+
+  if (CFG.mode === 'llm') {
+    // ── LLM opponent ──
+    vlog('LLM thinking…');
+    try {
+      bestUci = await llmEngine.getMove(game, CFG);
+    } catch (err) {
+      vlog('LLM ERROR: ' + (err.message || err));
+      setStatus('LLM error — falling back to Stockfish');
+      toast('LLM error, using Stockfish fallback', false);
+      // Fallback to Stockfish
+      try {
+        const lines = await sfEngine.analyze(game.fen(), 1, CFG.depthEngine);
+        bestUci = lines?.[0]?.uci;
+      } catch (e2) {
+        vlog('Stockfish fallback also failed: ' + e2.message);
+        setStatus('Both engines failed.');
+        return;
+      }
+    }
+  } else {
+    // ── Stockfish opponent ──
+    vlog('Stockfish thinking (depth ' + CFG.depthEngine + ')…');
+    try {
+      const lines = await sfEngine.analyze(game.fen(), 1, CFG.depthEngine);
+      bestUci = lines?.[0]?.uci;
+    } catch (err) {
+      vlog('SF ERROR: ' + (err.message || err));
+      setStatus('Engine error.');
+      return;
+    }
+  }
+
+  if (!bestUci) { vlog('No move received.'); setStatus('No opponent move.'); return; }
+
+  const san = (() => { const tmp = new Chess(game.fen()); const m = tmp.move(uciToObj(bestUci)); return m ? m.san : bestUci; })();
+  const m = game.move(uciToObj(bestUci));
+  if (!m) { vlog('!! Illegal opponent move: ' + bestUci); setStatus('Illegal opponent move.'); return; }
+
+  mlog(`   …${san}`);
+
+  // Brief highlight of opponent's move
+  highlightMove(bestUci.slice(0, 2), bestUci.slice(2, 4), 'rgba(224,82,82,0.35)');
+  syncBoard();
+  await new Promise(r => setTimeout(r, 400));
+  clearHighlights();
+
+  const over = isGameOver();
+  if (over) { setStatus(over); mlog('GAME OVER: ' + over); return; }
+
+  await buildOffers();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FREE MOVE MODE
+//
+//  Toggle board draggability. When active, user can drag
+//  any White piece to make a legal move at zero cost.
+// ═══════════════════════════════════════════════════════════
+
+function enterFreeMode() {
+  if (freeMovesLeft <= 0 || game.turn() !== 'w' || locked) return;
+  freeMode = true;
+  board = rebuildBoard(true); // rebuild with draggable: true
+  syncUI();
+  // Highlight all legal destination squares lightly
+  const moves = game.moves({ verbose: true });
+  const targets = new Set(moves.map(m => m.to));
+  targets.forEach(sq => highlightMove(sq, sq, 'rgba(92,204,111,0.15)'));
+  setStatus('Drag a piece for a FREE move, or pick an offer.');
+}
+
+function exitFreeMode() {
+  if (!freeMode) return;
+  freeMode = false;
+  board = rebuildBoard(false);
+  clearHighlights();
+  syncUI();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CHESSBOARD BUILDER
+//
+//  Rebuilds the board with or without drag. Necessary
+//  because chessboard.js doesn't support toggling draggable
+//  after construction (the option is read-only at init).
+// ═══════════════════════════════════════════════════════════
+
+function rebuildBoard(draggable) {
+  const pos = game.fen();
+
+  const cfg = {
+    position: pos,
+    orientation: 'white',
+    draggable: !!draggable,
+    pieceTheme: (piece) => PIECE_URLS[piece] || '',
+    // Drag handlers for free moves
+    onDragStart: (source, piece) => {
+      if (!freeMode) return false;
+      if (game.game_over()) return false;
+      if (game.turn() !== 'w') return false;
+      if (piece.search(/^b/) !== -1) return false; // can't drag black pieces
+
+      // Highlight legal moves for this piece
+      clearHighlights();
+      const moves = game.moves({ verbose: true }).filter(m => m.from === source);
+      moves.forEach(m => highlightMove(m.to, m.to, 'rgba(92,204,111,0.4)'));
+      highlightMove(source, source, 'rgba(92,204,111,0.25)');
+      return true;
+    },
+    onDrop: (source, target) => {
+      clearHighlights();
+
+      // Check for promotion
+      const piece = game.get(source);
+      const isPromotion = piece && piece.type === 'p' &&
+        ((piece.color === 'w' && target[1] === '8') || (piece.color === 'b' && target[1] === '1'));
+
+      const promotion = isPromotion ? 'q' : undefined; // auto-queen
+
+      // Try the move
+      const testGame = new Chess(game.fen());
+      const m = testGame.move(promotion ? { from: source, to: target, promotion } : { from: source, to: target });
+      if (!m) return 'snapback';
+
+      // Valid: execute as free move
+      playFreeMove(source, target, promotion);
+    },
+    onSnapEnd: () => {
+      board.position(game.fen());
+    }
+  };
+
+  return Chessboard('board', cfg);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SETTINGS UI
+// ═══════════════════════════════════════════════════════════
+
+function openSettings() {
+  settingsToUI(CFG);
+  document.getElementById('settingsOverlay').classList.add('open');
+  document.getElementById('settingsDrawer').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+  document.getElementById('settingsDrawer').classList.remove('open');
+}
+
+document.getElementById('btnSettings').onclick = openSettings;
+document.getElementById('closeSettings').onclick = closeSettings;
+document.getElementById('settingsOverlay').onclick = closeSettings;
+
+// Mode toggle
+document.querySelectorAll('#modeToggle .opt').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#modeToggle .opt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('llmSettings').style.display = (btn.dataset.mode === 'llm') ? 'block' : 'none';
+  };
+});
+
+document.getElementById('applySettings').onclick = async () => {
+  CFG = settingsFromUI();
+  saveSettings(CFG);
+  closeSettings();
+  toast('Settings applied');
+  await startNewGame();
+};
+
+// ═══════════════════════════════════════════════════════════
+//  GAME LIFECYCLE
+// ═══════════════════════════════════════════════════════════
+
+async function startNewGame() {
+  if (locked) return;
+  locked = true;
+
+  game.reset();
+  bankroll = CFG.bankroll;
+  moveNum = 0;
+  freeMovesLeft = CFG.freeMoves;
+  freeMode = false;
+  currentOffers = [];
+
+  $offers.innerHTML = '';
+  $log.textContent = '';
+  $vlog.textContent = '';
+  clearHighlights();
+
+  board = rebuildBoard(false);
+  mlog('═══ New Game ═══');
+  vlog('New game. Bank: ' + money(bankroll) + ' | Free moves: ' + freeMovesLeft);
+  syncUI();
+
+  await buildOffers();
+  locked = false;
+}
+
+// Button handlers
+document.getElementById('btnNew').onclick = startNewGame;
+
+document.getElementById('btnReroll').onclick = async () => {
+  if (locked || game.turn() !== 'w') return;
+  locked = true;
+  clearHighlights();
+  vlog('Re-rolling offers…');
+  await buildOffers();
+  locked = false;
+};
+
+document.getElementById('btnResign').onclick = () => {
+  if (locked) return;
+  setStatus('You resigned.');
+  currentOffers = [];
+  $offers.innerHTML = '';
+  mlog('RESIGNED.');
+};
+
+$freeBtn.onclick = () => {
+  if (freeMovesLeft <= 0 || game.turn() !== 'w' || locked) return;
+  if (freeMode) {
+    exitFreeMode();
+  } else {
+    enterFreeMode();
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+
+async function init() {
+  // Load settings
+  CFG = loadSettings();
+  settingsToUI(CFG);
+  bankroll = CFG.bankroll;
+  freeMovesLeft = CFG.freeMoves;
+
+  // Build initial board (non-draggable)
+  board = rebuildBoard(false);
+  syncUI();
+
+  mlog('Loading Stockfish…');
+  vlog('Loading Stockfish (asm.js)…');
+  setStatus('<span class="spin"></span> Loading engine…');
+
+  try {
+    await sfEngine.init();
+  } catch (err) {
+    setStatus('Stockfish failed to load.');
+    vlog('INIT ERROR: ' + (err.message || err));
+    vlog('If serving locally, use HTTP (python3 -m http.server), not file://');
+    toast('Engine failed to load', false);
+    return;
+  }
+
+  vlog('Stockfish ready.');
+  mlog('Engine ready.');
+  setStatus('Ready!');
+
+  await buildOffers();
+}
+
+init();
+
+})();
+</script>
+</body>
+</html>
